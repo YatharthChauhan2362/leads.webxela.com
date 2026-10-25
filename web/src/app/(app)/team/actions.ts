@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { must, sb } from "@/lib/db";
+import { logActivity } from "@/lib/activity";
+import { providerEnabled } from "@/lib/oauth";
 import { can, newApiKey, requireMember, type Member } from "@/lib/session";
 
 function done(msg: string, kind: "ok" | "error" = "ok"): never {
@@ -32,15 +34,17 @@ function mayChange(me: Member | null, who: Member, newRole?: string) {
 export async function invite(formData: FormData) {
   const me = await requireMember("admin");
   const parsed = z
-    .object({ email: z.string().trim().toLowerCase().email(), name: z.string().trim().max(120), role: Role, team_id: TeamId })
+    .object({ email: z.string().trim().toLowerCase().email(), name: z.string().trim().max(120), role: Role, team_id: TeamId, login_with: z.enum(["google", "zoho"]) })
     .safeParse(Object.fromEntries(formData));
   if (!parsed.success) done("Enter a valid email address.", "error");
-  const { email, name, role, team_id } = parsed.data;
+  const { email, name, role, team_id, login_with } = parsed.data;
+  if (!providerEnabled(login_with)) done(`${login_with === "zoho" ? "Zoho" : "Google"} sign in is not set up yet.`, "error");
   if (role !== "member" && me && me.role !== "owner") done("Only the owner can add admins.", "error");
   const exists = must(await sb().from("members").select("id").eq("email", email).maybeSingle());
   if (exists) done(`${email} is already on the team.`, "error");
-  must(await sb().from("members").insert({ email, name: name || null, role, team_id, status: "invited", invited_by: me?.id ?? null }));
-  done(`${email} can now sign in with Google or Zoho.`);
+  must(await sb().from("members").insert({ email, name: name || null, role, team_id, login_with, status: "invited", invited_by: me?.id ?? null }));
+  await logActivity(me, "invite", { target: email, detail: `${role}, signs in with ${login_with}` });
+  done(`${email} can now sign in with ${login_with === "zoho" ? "Zoho" : "Google"}.`);
 }
 
 export async function updateMember(formData: FormData) {
@@ -48,9 +52,11 @@ export async function updateMember(formData: FormData) {
   const who = await target(formData.get("id"));
   const role = Role.parse(formData.get("role"));
   const team_id = TeamId.parse(formData.get("team_id") ?? "");
+  const login_with = z.enum(["google", "zoho"]).parse(formData.get("login_with") ?? who.login_with);
   if (!mayChange(me, who, role)) done("Only the owner can change admins and owners.", "error");
   if (who.id === me?.id && role !== who.role) done("You cannot change your own role.", "error");
-  must(await sb().from("members").update({ role, team_id }).eq("id", who.id));
+  must(await sb().from("members").update({ role, team_id, login_with }).eq("id", who.id));
+  await logActivity(me, "member_change", { target: who.email, detail: `${role}, ${login_with}, team ${team_id ?? "none"}` });
   done(`Saved ${who.name || who.email}.`);
 }
 
@@ -61,6 +67,7 @@ export async function setAccess(formData: FormData) {
   if (who.id === me?.id) done("You cannot turn off your own access.", "error");
   if (!mayChange(me, who)) done("Only the owner can change admins and owners.", "error");
   must(await sb().from("members").update({ status: on ? (who.last_login_at ? "active" : "invited") : "disabled" }).eq("id", who.id));
+  await logActivity(me, "access", { target: who.email, detail: on ? "on" : "off" });
   done(on ? `${who.email} has access again.` : `${who.email} can no longer sign in.`);
 }
 
@@ -70,6 +77,7 @@ export async function removeMember(formData: FormData) {
   if (who.id === me?.id) done("You cannot remove yourself.", "error");
   if (!mayChange(me, who)) done("Only the owner can remove admins and owners.", "error");
   must(await sb().from("members").delete().eq("id", who.id));
+  await logActivity(me, "remove_member", { target: who.email });
   done(`${who.email} was removed. Their leads stay, now unassigned.`);
 }
 
@@ -78,30 +86,34 @@ export async function newKey(formData: FormData) {
   const id = String(formData.get("id") ?? me?.id ?? "");
   if (me && id !== me.id && !can(me, "admin")) done("You can only change your own key.", "error");
   must(await sb().from("members").update({ api_key: newApiKey() }).eq("id", z.string().uuid().parse(id)));
+  await logActivity(me, "new_key", { target: id });
   done("New extension key made. Paste it into the extension settings.");
 }
 
 export async function createTeam(formData: FormData) {
-  await requireMember("admin");
+  const me = await requireMember("admin");
   const name = z.string().trim().min(2).max(60).safeParse(formData.get("name"));
   if (!name.success) done("Team names need 2 to 60 characters.", "error");
   const r = await sb().from("teams").insert({ name: name.data });
   if (r.error) done(r.error.code === "23505" ? "A team with that name already exists." : r.error.message, "error");
+  await logActivity(me, "team_change", { detail: "createTeam" });
   done(`Team ${name.data} created.`);
 }
 
 export async function renameTeam(formData: FormData) {
-  await requireMember("admin");
+  const me = await requireMember("admin");
   const id = z.string().uuid().parse(formData.get("id"));
   const name = z.string().trim().min(2).max(60).safeParse(formData.get("name"));
   if (!name.success) done("Team names need 2 to 60 characters.", "error");
   must(await sb().from("teams").update({ name: name.data }).eq("id", id));
+  await logActivity(me, "team_change", { detail: "renameTeam" });
   done("Team renamed.");
 }
 
 export async function deleteTeam(formData: FormData) {
-  await requireMember("admin");
+  const me = await requireMember("admin");
   const id = z.string().uuid().parse(formData.get("id"));
   must(await sb().from("teams").delete().eq("id", id));
+  await logActivity(me, "team_change", { detail: "deleteTeam" });
   done("Team deleted. Its people are still on the team, without a group.");
 }

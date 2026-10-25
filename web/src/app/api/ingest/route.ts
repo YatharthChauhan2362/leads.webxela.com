@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { CORS, apiMember, checkKey, preflight } from "@/lib/api";
+import { logActivity } from "@/lib/activity";
 import { PostIn, ProfileIn, ingestPosts, logRun, saveProfile } from "@/lib/ingest";
 
 const Body = z.object({
@@ -31,7 +32,9 @@ export async function POST(req: Request) {
     }
   }
 
-  const res = await ingestPosts(posts, { capturedBy: (await apiMember(req))?.id });
+  const who = await apiMember(req);
+  const res = await ingestPosts(posts, { capturedBy: who?.id });
+  if (res.added || profiles) await logActivity(who, "capture", { detail: `${res.added} new posts, ${profiles} profiles` });
   if (posts.length) await logRun("extension", res.found, res.added);
   return NextResponse.json({ ...res, profiles }, { headers: CORS });
 }

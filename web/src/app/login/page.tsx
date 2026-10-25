@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { Brand } from "@/components/brand";
+import { ProviderLogo } from "@/components/provider-logo";
 import { buttonClass } from "@/components/ui/button";
 import { Flash } from "@/components/ui/flash";
 import { BLUE_PANEL } from "@/components/ui/layout";
@@ -27,17 +28,19 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
             {/* Plain links: sign in leaves the app for Google or Zoho, so it must be a full page load. */}
             {google ? (
               // eslint-disable-next-line @next/next/no-html-link-for-pages
-              <a href="/auth/google" className={buttonClass("primary", "lg", "w-full")}>
+              <a href="/auth/google" className={buttonClass("secondary", "lg", "w-full")}>
+                <ProviderLogo provider="google" size={20} />
                 Continue with Google
               </a>
             ) : null}
             {zoho ? (
               // eslint-disable-next-line @next/next/no-html-link-for-pages
-              <a href="/auth/zoho" className={buttonClass(google ? "secondary" : "primary", "lg", "w-full")}>
+              <a href="/auth/zoho" className={buttonClass("secondary", "lg", "w-full")}>
+                <ProviderLogo provider="zoho" size={20} />
                 Continue with Zoho
               </a>
             ) : null}
-            <p className="pt-2 text-center text-[13px] text-muted-foreground">Not on the team yet? Ask the owner or an admin to invite your email.</p>
+            <p className="pt-2 text-center text-[13px] text-muted-foreground">Use the option your admin chose for you. Not on the team yet? Ask the owner or an admin to invite your email.</p>
           </div>
         </div>
       </div>

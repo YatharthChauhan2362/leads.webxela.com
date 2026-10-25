@@ -1,4 +1,6 @@
 import { createTeam, deleteTeam, invite, newKey, removeMember, renameTeam, setAccess, updateMember } from "./actions";
+import Link from "next/link";
+import { PROVIDER_WORDS, ProviderLogo } from "@/components/provider-logo";
 import { timeAgo } from "@/components/shell/app-shell";
 import { Flash } from "@/components/ui/flash";
 import { Field, FormGrid, Input, Select } from "@/components/ui/form";
@@ -27,6 +29,8 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
   for (const a of assigned) leadCount.set(a.assigned_to, (leadCount.get(a.assigned_to) ?? 0) + 1);
   const teamName = new Map(teams.map((t) => [t.id, t.name]));
   const roleOptions = owner ? ["member", "admin", "owner"] : ["member"];
+  const providers = (["google", "zoho"] as const).filter((p) => providerEnabled(p));
+  const allProviders = ["google", "zoho"] as const;
 
   return (
     <>
@@ -75,6 +79,16 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
                   {roleOptions.map((r) => (
                     <option key={r} value={r}>
                       {ROLE_WORDS[r]}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Signs in with" htmlFor="login_with" hint={providers.length < 2 ? `Only ${providers.map((p) => PROVIDER_WORDS[p]).join(" and ") || "no option"} is set up so far.` : "They can only sign in this way."}>
+                <Select id="login_with" name="login_with" defaultValue={providers[0] ?? "google"}>
+                  {allProviders.map((p) => (
+                    <option key={p} value={p} disabled={!providerEnabled(p)}>
+                      {PROVIDER_WORDS[p]}
+                      {providerEnabled(p) ? "" : " (not set up yet)"}
                     </option>
                   ))}
                 </Select>
@@ -128,6 +142,10 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
                         {self ? <span className="ml-1 text-[13px] font-normal text-muted-foreground">(you)</span> : null}
                       </p>
                       <p className="text-[13px] break-all text-muted-foreground">{m.email}</p>
+                      <p className="mt-1 flex items-center gap-1.5 text-[13px]">
+                        <ProviderLogo provider={m.login_with} size={14} />
+                        Signs in with {PROVIDER_WORDS[m.login_with]}
+                      </p>
                     </div>
                   </div>
                 </Td>
@@ -142,6 +160,16 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
                         {(owner ? ["member", "admin", "owner"] : ["member"]).map((r) => (
                           <option key={r} value={r}>
                             {ROLE_WORDS[r]}
+                          </option>
+                        ))}
+                      </select>
+                      <label className="sr-only" htmlFor={`login-${m.id}`}>
+                        Sign in method for {m.email}
+                      </label>
+                      <select id={`login-${m.id}`} name="login_with" defaultValue={m.login_with} className="h-11 rounded-xl border border-input bg-background px-2 text-[14px]">
+                        {allProviders.map((p) => (
+                          <option key={p} value={p}>
+                            {PROVIDER_WORDS[p]}
                           </option>
                         ))}
                       </select>
@@ -171,9 +199,12 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
                   <Badge tone={m.status === "active" ? "green" : m.status === "invited" ? "amber" : "red"}>
                     {m.status === "active" ? "Active" : m.status === "invited" ? "Invited" : "Turned off"}
                   </Badge>
-                  <p className="mt-1 text-[13px] text-muted-foreground">
-                    {m.last_login_at ? `Signed in ${timeAgo(m.last_login_at)} with ${m.provider === "zoho" ? "Zoho" : "Google"}` : "Not signed in yet"}
-                  </p>
+                  <p className="mt-1 text-[13px] text-muted-foreground">{m.last_login_at ? `Last signed in ${timeAgo(m.last_login_at)}` : "Not signed in yet"}</p>
+                  {admin ? (
+                    <Link href={`/activity?who=${m.id}`} className="mt-1 inline-flex min-h-[32px] items-center text-[13px] font-medium text-primary hover:underline">
+                      See activity
+                    </Link>
+                  ) : null}
                 </Td>
                 <Td className="align-top">{leadCount.get(m.id) ?? 0}</Td>
                 {admin ? (

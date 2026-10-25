@@ -42,6 +42,12 @@ export const DEFAULT_SETTINGS = {
   subreddits: "forhire\nslavelabour\nstartups\nSaaS\nentrepreneur",
   min_score: "0",
   alert_score: "70",
+  // Branding, set by admins on Searches and alerts.
+  brand_first: "Yatri",
+  brand_second: "Leads",
+  company_name: "Yatri Cloud",
+  brand_color: "#0080FF",
+  logo_url: "/logo.png",
 };
 
 export type SettingKey = keyof typeof DEFAULT_SETTINGS;

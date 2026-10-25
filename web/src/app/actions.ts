@@ -7,6 +7,8 @@ import { must, sb, setSettings, type Lead } from "@/lib/db";
 import { aiEnabled, aiText } from "@/lib/ai";
 import { scorePost } from "@/lib/score";
 import { requireMember } from "@/lib/session";
+import { logActivity } from "@/lib/activity";
+import { whiteContrast } from "@/lib/brand";
 import { pollSources } from "@/lib/sources";
 
 const STATUSES = ["new", "contacted", "replied", "won", "lost"] as const;
@@ -24,30 +26,33 @@ function back(formData: FormData, msg: string, kind: "ok" | "error" = "ok"): nev
 }
 
 export async function setStatus(formData: FormData) {
-  await requireMember();
+  const me = await requireMember();
   const id = Id.parse(formData.get("id"));
   const status = z.enum(STATUSES).parse(formData.get("status"));
   must(await sb().from("leads").update({ status }).eq("id", id));
+  await logActivity(me, "status", { target: `lead ${id}`, detail: status });
   back(formData, `Moved to ${status}.`);
 }
 
 export async function saveNotes(formData: FormData) {
-  await requireMember();
+  const me = await requireMember();
   const id = Id.parse(formData.get("id"));
   const notes = z.string().max(5000).parse(formData.get("notes") ?? "");
   must(await sb().from("leads").update({ notes }).eq("id", id));
+  await logActivity(me, "notes", { target: `lead ${id}`, detail: notes.slice(0, 300) });
   back(formData, "Notes saved.");
 }
 
 export async function deleteLead(formData: FormData) {
-  await requireMember("admin");
+  const me = await requireMember("admin");
   const id = Id.parse(formData.get("id"));
   must(await sb().from("leads").delete().eq("id", id));
+  await logActivity(me, "delete_lead", { target: `lead ${id}` });
   back(formData, "Lead removed.");
 }
 
 export async function draftReply(formData: FormData) {
-  await requireMember();
+  const me = await requireMember();
   const id = Id.parse(formData.get("id"));
   const lead = must(await sb().from("leads").select("*").eq("id", id).maybeSingle()) as Lead | null;
   if (!lead) back(formData, "That lead is gone.", "error");
@@ -68,6 +73,7 @@ No hype words, no emojis, no dashes as punctuation, no lists. Sign off as "Yatha
     reply = template(first, lead);
   }
   must(await sb().from("leads").update({ reply }).eq("id", id));
+  await logActivity(me, "reply", { target: `lead ${id}`, detail: reply.slice(0, 300) });
   back(formData, "Reply drafted.");
 }
 
@@ -77,7 +83,7 @@ function template(first: string, lead: Lead) {
 }
 
 export async function rescoreAll(formData: FormData) {
-  await requireMember("admin");
+  const me = await requireMember("admin");
   const rows = must(await sb().from("leads").select("id, text, author, headline"));
   for (const r of rows) {
     const s = await scorePost(r.text, r.author, r.headline);
@@ -88,11 +94,12 @@ export async function rescoreAll(formData: FormData) {
         .eq("id", r.id),
     );
   }
+  await logActivity(me, "rescore", { detail: `${rows.length} leads` });
   back(formData, `Scored ${rows.length} leads again.`);
 }
 
 export async function checkNow(formData: FormData) {
-  await requireMember();
+  const me = await requireMember();
   let msg: string;
   try {
     const r = await pollSources();
@@ -100,6 +107,7 @@ export async function checkNow(formData: FormData) {
   } catch (err) {
     back(formData, `The check failed: ${(err as Error).message}`, "error");
   }
+  await logActivity(me, "check_now", { detail: msg });
   back(formData, msg);
 }
 
@@ -112,15 +120,16 @@ const Settings = z.object({
 });
 
 export async function saveSettings(formData: FormData) {
-  await requireMember("admin");
+  const me = await requireMember("admin");
   const r = Settings.safeParse(Object.fromEntries(formData));
   if (!r.success) back(formData, "Scores must be numbers from 0 to 100.", "error");
   await setSettings(Object.fromEntries(Object.entries(r.data).map(([k, v]) => [k, String(v).replace(/\r/g, "").trim()])));
+  await logActivity(me, "settings", { detail: Object.keys(r.data).join(", ") });
   back(formData, "Settings saved.");
 }
 
 export async function addManual(formData: FormData) {
-  await requireMember();
+  const me = await requireMember();
   const { ingestPosts } = await import("@/lib/ingest");
   const text = String(formData.get("text") ?? "").trim();
   if (text.length < 20) back(formData, "Paste the full post text, at least 20 characters.", "error");
@@ -133,6 +142,7 @@ export async function addManual(formData: FormData) {
       postUrl: String(formData.get("post_url") ?? "") || null,
     },
   ]);
+  await logActivity(me, "add_post", { detail: text.slice(0, 200) });
   back(formData, res.added ? "Lead added." : "Not added. It scored below your minimum, or it is already in the list.", res.added ? "ok" : "error");
 }
 
@@ -143,5 +153,40 @@ export async function assignLead(formData: FormData) {
   const raw = String(formData.get("member") ?? "");
   const to = raw === "me" ? (me?.id ?? null) : raw ? z.string().uuid().parse(raw) : null;
   must(await sb().from("leads").update({ assigned_to: to }).eq("id", id));
+  await logActivity(me, "assign", { target: `lead ${id}`, detail: to ?? "nobody" });
   back(formData, to ? "Lead assigned." : "Lead is now unassigned.");
+}
+
+/** Brand name, company, colour and logo. Admins only. */
+export async function saveBranding(formData: FormData) {
+  const me = await requireMember("admin");
+  if (formData.get("reset") === "1") {
+    await setSettings({ brand_first: "Yatri", brand_second: "Leads", company_name: "Yatri Cloud", brand_color: "#0080FF", logo_url: "/logo.png" });
+    await logActivity(me, "settings", { detail: "Branding reset" });
+    back(formData, "Branding is back to the original.");
+  }
+  const r = z
+    .object({
+      brand_first: z.string().trim().min(1).max(30),
+      brand_second: z.string().trim().max(30),
+      company_name: z.string().trim().min(1).max(60),
+      brand_color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+    })
+    .safeParse(Object.fromEntries(formData));
+  if (!r.success) back(formData, "Fill in the app name and company, and pick a colour.", "error");
+  if (whiteContrast(r.data.brand_color) < 3) back(formData, "That colour is too light for white text. Pick a darker shade.", "error");
+
+  let logo_url: string | undefined;
+  const file = formData.get("logo");
+  if (file instanceof File && file.size > 0) {
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) back(formData, "The logo must be a PNG, JPG or WebP image.", "error");
+    if (file.size > 1024 * 1024) back(formData, "The logo must be under 1 MB.", "error");
+    const path = `logo-${Date.now()}.${file.type.split("/")[1]}`;
+    const up = await sb().storage.from("brand").upload(path, file, { contentType: file.type, upsert: false });
+    if (up.error) back(formData, `Could not upload the logo: ${up.error.message}`, "error");
+    logo_url = sb().storage.from("brand").getPublicUrl(path).data.publicUrl;
+  }
+  await setSettings({ ...r.data, brand_color: r.data.brand_color.toUpperCase(), ...(logo_url ? { logo_url } : {}) });
+  await logActivity(me, "settings", { detail: `Branding: ${r.data.brand_first} ${r.data.brand_second}, ${r.data.brand_color}${logo_url ? ", new logo" : ""}` });
+  back(formData, "Branding saved.");
 }

@@ -347,6 +347,7 @@
     out.querySelectorAll("[data-copy]").forEach((b) =>
       b.addEventListener("click", () => {
         navigator.clipboard.writeText(b.dataset.copy);
+        chrome.runtime.sendMessage({ type: "activity", action: "copy", detail: b.dataset.copy, path: location.href.split("?")[0] });
         b.textContent = "Copied";
         setTimeout(() => (b.textContent = "Copy"), 1200);
       }),

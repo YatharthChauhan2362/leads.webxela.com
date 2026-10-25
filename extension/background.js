@@ -49,6 +49,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
       });
     return true;
   }
+  if (msg.type === "activity") {
+    // Copies and contact links made in the extension go to the app's Activity log.
+    api("/api/activity", { method: "POST", body: JSON.stringify({ action: msg.action, target: msg.target, detail: msg.detail, path: msg.path }) })
+      .then(() => reply({ ok: true }))
+      .catch(() => reply({ ok: false }));
+    return true;
+  }
   if (msg.type === "lookup") {
     lookup(msg).then(reply).catch((e) => reply({ error: e.message }));
     return true;

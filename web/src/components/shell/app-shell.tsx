@@ -1,9 +1,12 @@
 import type { ReactNode } from "react";
 import { Brand } from "@/components/brand";
 import { Avatar, BLUE_PANEL } from "@/components/ui/layout";
+import { getBrand } from "@/lib/brand";
 import { must, sb } from "@/lib/db";
 import { can, type Member } from "@/lib/session";
 import { MobileMenu, NavLinks, type NavGroup } from "./nav-links";
+import { ActivityTracker } from "./activity-tracker";
+import { Suspense } from "react";
 
 const ROLE_WORDS: Record<string, string> = { owner: "Owner", admin: "Admin", member: "Member" };
 
@@ -25,6 +28,7 @@ function nav(newCount: number, member: Member | null): NavGroup[] {
         { href: "/extension", label: "Chrome extension" },
         ...(admin ? [{ href: "/settings", label: "Searches and alerts" }] : []),
         { href: "/team", label: "Team" },
+        ...(admin ? [{ href: "/activity", label: "Activity" }] : []),
       ],
     },
   ];
@@ -32,13 +36,13 @@ function nav(newCount: number, member: Member | null): NavGroup[] {
 
 type Last = { at: string; added: number } | null;
 
-function StatusCard({ last }: { last: Last }) {
+function StatusCard({ last, company }: { last: Last; company: string }) {
   return (
     <div className="relative shrink-0 overflow-hidden rounded-2xl p-4 text-white shadow-[var(--shadow-glow)]" style={{ backgroundImage: BLUE_PANEL }}>
       <div aria-hidden className="pointer-events-none absolute -top-10 -right-10 size-32 rounded-full border-[18px] border-white/10" />
       <div className="relative">
         <p className="text-[16px] leading-tight font-bold" style={{ fontFamily: "var(--font-display)" }}>
-          Yatri Cloud
+          {company}
         </p>
         <p className="mt-1 text-[13px] text-white/85">
           {last ? `Last check ${timeAgo(last.at)}, ${last.added} new` : "No check yet"}
@@ -48,10 +52,10 @@ function StatusCard({ last }: { last: Last }) {
   );
 }
 
-function SideContent({ count, last, member }: { count: number; last: Last; member: Member | null }) {
+function SideContent({ count, last, member, company }: { count: number; last: Last; member: Member | null; company: string }) {
   return (
     <div className="flex min-h-full flex-col gap-6 [&>*]:shrink-0">
-      <StatusCard last={last} />
+      <StatusCard last={last} company={company} />
       <nav aria-label="Main">
         <NavLinks groups={nav(count, member)} />
       </nav>
@@ -81,22 +85,28 @@ export async function AppShell({ children, member }: { children: ReactNode; memb
     sb().from("runs").select("at, added").order("id", { ascending: false }).limit(1).maybeSingle(),
   ]);
   const count = newLeads.count ?? 0;
+  const brand = await getBrand();
   const last = must(lastRun) as Last;
   return (
     <div className="min-h-dvh bg-canvas lg:grid lg:grid-cols-[272px_1fr]">
+      {member ? (
+        <Suspense fallback={null}>
+          <ActivityTracker />
+        </Suspense>
+      ) : null}
       <aside className="no-print sticky top-0 hidden h-dvh flex-col border-r border-border bg-background lg:flex">
         <div className="flex h-16 shrink-0 items-center border-b border-border px-5">
           <Brand />
         </div>
         <div className="flex-1 overflow-y-auto p-4">
-          <SideContent count={count} last={last} member={member} />
+          <SideContent count={count} last={last} member={member} company={brand.company} />
         </div>
       </aside>
       <div className="min-w-0">
         <header className="no-print sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background px-4 lg:hidden">
           <Brand />
           <MobileMenu label="Open menu">
-            <SideContent count={count} last={last} member={member} />
+            <SideContent count={count} last={last} member={member} company={brand.company} />
           </MobileMenu>
         </header>
         <main className="mx-auto w-full max-w-[1760px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>

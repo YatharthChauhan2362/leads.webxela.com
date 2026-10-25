@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { CORS, apiMember, checkKey, preflight } from "@/lib/api";
+import { logActivity } from "@/lib/activity";
 import type { Profile } from "@/lib/db";
 import { PostIn, ProfileIn, cleanProfileUrl, getProfile, ingestPosts, saveProfile } from "@/lib/ingest";
 
@@ -41,6 +42,7 @@ export async function POST(req: Request) {
   let workEmail = null;
   if (profile) {
     const r = await saveProfile(profile);
+    await logActivity(await apiMember(req), "lookup", { target: profile.url, detail: [profile.name, r.profile.emails, r.profile.phones, r.prediction?.email].filter(Boolean).join(" | ") });
     contacts = toContacts(r.profile);
     workEmail = r.prediction ? { ...r.prediction, alternatives: r.prediction.alternatives } : workEmailOf(r.profile);
   }

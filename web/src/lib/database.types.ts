@@ -39,6 +39,53 @@ export type Database = {
   }
   public: {
     Tables: {
+      activity: {
+        Row: {
+          action: string
+          at: string
+          detail: string | null
+          id: number
+          ip: string | null
+          member_email: string | null
+          member_id: string | null
+          path: string | null
+          target: string | null
+          user_agent: string | null
+        }
+        Insert: {
+          action: string
+          at?: string
+          detail?: string | null
+          id?: never
+          ip?: string | null
+          member_email?: string | null
+          member_id?: string | null
+          path?: string | null
+          target?: string | null
+          user_agent?: string | null
+        }
+        Update: {
+          action?: string
+          at?: string
+          detail?: string | null
+          id?: never
+          ip?: string | null
+          member_email?: string | null
+          member_id?: string | null
+          path?: string | null
+          target?: string | null
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       companies: {
         Row: {
           domain: string | null
@@ -198,6 +245,7 @@ export type Database = {
           id: string
           invited_by: string | null
           last_login_at: string | null
+          login_with: string
           name: string | null
           provider: string | null
           role: string
@@ -212,6 +260,7 @@ export type Database = {
           id?: string
           invited_by?: string | null
           last_login_at?: string | null
+          login_with?: string
           name?: string | null
           provider?: string | null
           role?: string
@@ -226,6 +275,7 @@ export type Database = {
           id?: string
           invited_by?: string | null
           last_login_at?: string | null
+          login_with?: string
           name?: string | null
           provider?: string | null
           role?: string

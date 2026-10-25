@@ -2,10 +2,12 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 /** Vertical blue used by page headers and the workspace card. A touch brighter at the top. */
-export const BLUE_PANEL = "linear-gradient(180deg, hsl(207 100% 55%) 0%, hsl(210 100% 50%) 55%, hsl(213 100% 46%) 100%)";
+// Follows the brand colour an admin picks (--color-primary), a touch lighter at the top and darker at the bottom.
+export const BLUE_PANEL =
+  "linear-gradient(180deg, color-mix(in srgb, var(--color-primary) 88%, white) 0%, var(--color-primary) 55%, color-mix(in srgb, var(--color-primary) 90%, black) 100%)";
 
 /** Large blue areas on the public site: the same blue, with a soft glow in the top right corner. */
-export const BLUE_HERO = `radial-gradient(60% 70% at 85% 0%, hsl(200 100% 62% / 0.55) 0%, transparent 70%), ${BLUE_PANEL}`;
+export const BLUE_HERO = `radial-gradient(60% 70% at 85% 0%, color-mix(in srgb, var(--color-primary) 55%, white) 0%, transparent 70%), ${BLUE_PANEL}`;
 
 export function PageHeader({
   title,

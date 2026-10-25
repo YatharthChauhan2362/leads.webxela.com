@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { logActivity } from "@/lib/activity";
 import { must, sb } from "@/lib/db";
 import { appUrl, exchangeCode, type Provider } from "@/lib/oauth";
 import { SESSION_COOKIE, makeSessionToken, newApiKey, sessionCookie, type Member } from "@/lib/session";
@@ -31,10 +32,22 @@ export async function GET(req: Request, { params }: { params: Promise<{ provider
   let member = must(await sb().from("members").select("*").eq("email", user.email).maybeSingle()) as Member | null;
   const owners = (process.env.OWNER_EMAILS ?? "").toLowerCase().split(",").map((s) => s.trim()).filter(Boolean);
   if (!member && owners.includes(user.email)) {
-    member = must(await sb().from("members").insert({ email: user.email, role: "owner", status: "active" }).select().single()) as Member;
+    member = must(await sb().from("members").insert({ email: user.email, role: "owner", status: "active", login_with: p }).select().single()) as Member;
   }
-  if (!member) return fail(`${user.email} is not on the team yet. Ask the owner or an admin to invite you.`);
-  if (member.status === "disabled") return fail("Your access was turned off. Ask the owner or an admin.");
+  if (!member) {
+    await logActivity({ id: "", email: user.email }, "sign_in_refused", { detail: `Not invited, tried ${p}` });
+    return fail(`${user.email} is not on the team yet. Ask the owner or an admin to invite you.`);
+  }
+  const who = { id: member.id, email: member.email };
+  if (member.status === "disabled") {
+    await logActivity(who, "sign_in_refused", { detail: "Access is turned off" });
+    return fail("Your access was turned off. Ask the owner or an admin.");
+  }
+  // Each person signs in only the way their admin chose. Owners may use either.
+  if (member.login_with !== p && !owners.includes(user.email)) {
+    await logActivity(who, "sign_in_refused", { detail: `Tried ${p}, must use ${member.login_with}` });
+    return fail(`Please use Continue with ${member.login_with === "zoho" ? "Zoho" : "Google"}. That is how your admin set up your access.`);
+  }
   // The owner email always stays owner, even if someone changed it.
   const role = owners.includes(user.email) ? "owner" : member.role;
 
@@ -55,6 +68,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ provider
       .single(),
   ) as Member;
 
+  await logActivity(who, "sign_in", { detail: `With ${p === "zoho" ? "Zoho" : "Google"}` });
   const res = NextResponse.redirect(`${appUrl()}/`);
   res.cookies.set(SESSION_COOKIE, makeSessionToken(updated.id), sessionCookie);
   return res;
