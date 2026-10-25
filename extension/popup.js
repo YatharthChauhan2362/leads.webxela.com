@@ -29,6 +29,19 @@ function renderGeneral(s) {
 
 let person = null;
 
+// Sends a message to the LinkedIn tab. If the tab was open before the extension was installed,
+// load the extension's code into it first, so you never have to reload the page.
+async function toTab(tabId, msg) {
+  const send = () => new Promise((res) => chrome.tabs.sendMessage(tabId, msg, (r) => res(chrome.runtime.lastError ? undefined : r)));
+  let r = await send();
+  if (r === undefined) {
+    await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] }).catch(() => {});
+    await new Promise((res) => setTimeout(res, 400));
+    r = await send();
+  }
+  return r ?? null;
+}
+
 function itemRow(kind, value) {
   const href = kind === "Email" ? `mailto:${value}` : kind === "Phone" ? `tel:${value.replace(/[^\d+]/g, "")}` : value;
   const label = kind === "Email" ? "Send email" : kind === "Phone" ? "Call" : "Open";
@@ -59,15 +72,12 @@ async function showPerson(tab) {
   $("person").classList.remove("hidden");
   $("general").classList.add("hidden");
 
-  chrome.tabs.sendMessage(tab.id, { type: "profile-info" }, (r) => {
-    if (chrome.runtime.lastError || !r) {
-      $("p-name").textContent = (tab.title || "").replace(/\s*\|\s*LinkedIn.*$/, "").replace(/^\(\d+\)\s*/, "") || "This person";
-      $("p-headline").textContent = "Reload this LinkedIn tab once so the extension can read it.";
-      return;
-    }
+  $("p-name").textContent = (tab.title || "").replace(/\s*\|\s*LinkedIn.*$/, "").replace(/^\(\d+\)\s*/, "") || "This person";
+  toTab(tab.id, { type: "profile-info" }).then((r) => {
+    if (!r) return;
     person.name = r.name;
     person.headline = r.headline;
-    $("p-name").textContent = r.name || "This person";
+    $("p-name").textContent = r.name || $("p-name").textContent;
     $("p-headline").textContent = r.headline || "";
   });
 
@@ -88,7 +98,7 @@ $("find").onclick = async () => {
   $("p-status").textContent = "Reading their Contact info and website. This takes about 10 seconds.";
   // Read the Contact info on the page you are on. Only if that fails does the extension use a minimized window.
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  const profile = await new Promise((res) => chrome.tabs.sendMessage(tab.id, { type: "find-here" }, (p) => res(chrome.runtime.lastError ? null : p)));
+  const profile = await toTab(tab.id, { type: "find-here" });
   chrome.runtime.sendMessage(profile ? { type: "lookup", profile } : { type: "lookup", url: person.url }, (r) => {
     $("find").disabled = false;
     $("find").textContent = "Find email and phone again";

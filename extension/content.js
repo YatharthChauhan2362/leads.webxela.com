@@ -1,7 +1,10 @@
 // Reads posts and contact info from LinkedIn pages you have open, and hands them to background.js.
-// It only reads what is on the page. It never clicks, likes, comments or messages.
+// It only reads what is on the page. The one click it makes is opening Contact info when you press Find.
 
 (() => {
+  // The popup may load this file again into a tab that already has it.
+  if (window.__yatriLeadsLoaded) return;
+  window.__yatriLeadsLoaded = true;
   const sent = new Set();
   let enabled = true;
 
@@ -147,11 +150,37 @@
   }
 
   // Opens this profile's own Contact info box, reads it and closes it again, so you stay on the page.
+  // Emails and phone numbers people write in their headline, About or Featured text.
+  function contactsInPageText() {
+    const main = document.querySelector("main");
+    if (!main) return { emails: [], phones: [] };
+    const text = main.innerText;
+    const emails = [...new Set((text.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,24}/g) || []).map((e) => e.toLowerCase()))];
+    // Only numbers written with a country code, so follower counts and dates are never picked up.
+    const phones = [...new Set((text.match(/\+\d{1,3}[\s.-]?\(?\d{2,5}\)?(?:[\s.-]?\d{2,5}){2,4}/g) || []).filter((p) => {
+      const d = p.replace(/\D/g, "");
+      return d.length >= 10 && d.length <= 15;
+    }))];
+    return { emails, phones };
+  }
+
   async function findContactHere() {
     const m = location.pathname.match(/^\/in\/([^/]+)/);
     if (!m) return null;
+    const fromPage = contactsInPageText();
     const link = document.querySelector('#top-card-text-details-contact-info, a[href*="/overlay/contact-info"]');
-    if (!link) return null;
+    if (!link) {
+      // No Contact info link on this layout. Still return what the page text shows.
+      return {
+        url: `https://www.linkedin.com/in/${m[1]}/`,
+        name: clean(document.querySelector("main h1")?.innerText || "").split("\n")[0] || null,
+        headline: clean(document.querySelector("main .text-body-medium")?.innerText || "") || null,
+        emails: fromPage.emails,
+        phones: fromPage.phones,
+        websites: [],
+        found: true,
+      };
+    }
     const startPath = location.pathname;
     link.click();
     let dialog = null;
@@ -168,7 +197,10 @@
     if (close) close.click();
     await sleep(300);
     if (location.pathname !== startPath && /overlay\/contact-info/.test(location.pathname)) history.back();
-    return data.found ? data : null;
+    if (!data.found) return null;
+    data.emails = [...new Set([...data.emails, ...fromPage.emails])];
+    data.phones = [...new Set([...data.phones, ...fromPage.phones])];
+    return data;
   }
 
   function readProfile() {
