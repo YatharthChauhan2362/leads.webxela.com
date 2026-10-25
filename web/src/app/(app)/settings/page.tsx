@@ -80,7 +80,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             </div>
             <FormSection title="Scores">
               <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
-                <Field label="Keep posts scoring at least" htmlFor="min_score" hint="0 saves every post. Low scores just sort lower.">
+                <Field label="Keep posts scoring at least" htmlFor="min_score" hint="Posts that match a search phrase are always kept. 40 skips cold posts that match nothing.">
                   <Input id="min_score" name="min_score" type="number" min={0} max={100} defaultValue={settings.min_score} required />
                 </Field>
                 <Field label="Alert me at" htmlFor="alert_score" hint="Posts at or above this are emailed to you.">

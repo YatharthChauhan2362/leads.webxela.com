@@ -1,7 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { getSettings, must, sb, type Lead, type Profile } from "./db";
+import { getSettings, lines, must, sb, type Lead, type Profile } from "./db";
 import { extractEmails, extractPhones, mergeList } from "./contacts";
 import { scorePost } from "./score";
 import { sendLeadEmail } from "./alerts";
@@ -51,9 +51,26 @@ function postKey(p: PostIn) {
   return `${p.source}:${createHash("sha1").update(`${p.author}|${p.text.slice(0, 300)}`).digest("hex")}`;
 }
 
+const STOP = new Set(["a", "an", "the", "for", "to", "of", "and", "or", "in", "on", "our", "my", "we", "i", "is", "are", "with", "need", "needs"]);
+
+/** The first search phrase whose main words all appear in the post. "looking for a developer" matches "Looking for an experienced developer". */
+export function matchPhrase(text: string, phrases: string[]): string | null {
+  const lower = text.toLowerCase();
+  for (const phrase of phrases) {
+    const words = phrase.toLowerCase().split(/[^a-z0-9+#.]+/).filter((w) => w.length > 1 && !STOP.has(w));
+    if (words.length && words.every((w) => lower.includes(w))) return phrase;
+  }
+  return null;
+}
+
 export async function ingestPosts(posts: PostIn[], opts: { force?: boolean; capturedBy?: string | null } = {}): Promise<{ found: number; added: number }> {
   if (!posts.length) return { found: 0, added: 0 };
   const settings = await getSettings();
+  // The team's search phrases plus the capturing member's own.
+  const memberSearches = opts.capturedBy
+    ? ((await sb().from("members").select("searches").eq("id", opts.capturedBy).maybeSingle()).data?.searches ?? "")
+    : "";
+  const phrases = [...new Set([...lines(settings.searches), ...lines(memberSearches)])];
   const minScore = Number(settings.min_score) || 0;
   const alertScore = Number(settings.alert_score) || 70;
 
@@ -70,8 +87,11 @@ export async function ingestPosts(posts: PostIn[], opts: { force?: boolean; capt
     known.add(key);
     const authorUrl = p.source === "linkedin" ? cleanProfileUrl(p.authorUrl) : (p.authorUrl ?? null);
     const s = await scorePost(p.text, p.author, p.headline);
-    // A post you save by hand is kept whatever its score.
-    if (s.score < minScore && !opts.force) continue;
+    // Keep a post only if it matches a search phrase, scores at least the minimum, or was saved by hand.
+    const matched = matchPhrase(p.text, phrases);
+    // Matching one of your searches is a strong sign, so it counts toward the score.
+    if (matched) s.score = Math.min(100, s.score + 20);
+    if (s.score < minScore && !matched && !opts.force) continue;
 
     const emails = extractEmails(p.text);
     const phones = extractPhones(p.text);
@@ -90,6 +110,7 @@ export async function ingestPosts(posts: PostIn[], opts: { force?: boolean; capt
         .upsert(
           {
             captured_by: opts.capturedBy ?? null,
+            matched_search: matched,
             work_email: profile?.work_email ?? guess?.email ?? null,
             work_email_status: (profile?.work_email_status ?? guess?.status ?? null) as Lead["work_email_status"],
             work_email_confidence: profile?.work_email_confidence ?? guess?.confidence ?? null,

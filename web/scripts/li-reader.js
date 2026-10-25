@@ -73,6 +73,21 @@
       ".update-components-actor__name",
     ]);
     author = author.split("\n")[0].replace(/\s*•.*$/, "").trim();
+    // Newer LinkedIn layouts hide the old class names. Try the profile link's visible text,
+    // then the "View X's profile" labels LinkedIn puts on links and photos.
+    if (!author) {
+      const named = box.querySelector('a[href*="/in/"] span[aria-hidden="true"], a[href*="/company/"] span[aria-hidden="true"]');
+      author = clean(named?.innerText || "").split("\n")[0];
+    }
+    if (!author) {
+      const labelled = [...box.querySelectorAll('a[href*="/in/"][aria-label], a[href*="/company/"][aria-label], img[alt]')]
+        .map((el) => el.getAttribute("aria-label") || el.getAttribute("alt") || "")
+        .map((t) => (t.match(/^View:?\s*(.+?)(?:[’']s)?\s+(?:profile|graphic link|page|company)/i) || [])[1])
+        .find(Boolean);
+      author = (labelled || "").trim();
+    }
+    if (!author && actorLink) author = clean(actorLink.innerText || "").split("\n")[0].replace(/\s*•.*$/, "").trim();
+    author = author.replace(/\s*(Verified|Premium|Profile|Follow|\d+(st|nd|rd|th)\+?)$/i, "").trim();
     const headline = firstText(box, [".update-components-actor__description span[aria-hidden='true']", ".update-components-actor__description"]).split("\n")[0];
     const postedAt = firstText(box, [".update-components-actor__sub-description span[aria-hidden='true']", ".update-components-actor__sub-description"]).split("•")[0].trim();
 

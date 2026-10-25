@@ -13,8 +13,9 @@ export type Scored = {
 
 // Phrases people use when they need something built and want to hire someone outside.
 const NEED: [RegExp, number][] = [
-  [/\b(looking|searching) for (a |an )?(freelance |freelancer|developer|dev|agency|team|partner|someone|somebody|expert|consultant|designer|engineer)/i, 30],
-  [/\b(need|needs|needed|require|requires|required|want) (a |an |some )?(freelance |freelancer|developer|dev|agency|team|someone|somebody|expert|consultant|designer|engineer|help)/i, 30],
+  // Up to two words may sit in between: "looking for an experienced React developer".
+  [/\b(looking|searching|hiring) for (a |an )?([\w.+#-]+ ){0,2}(freelance|freelancer|developer|dev|agency|team|partner|someone|somebody|expert|consultant|designer|engineer)/i, 30],
+  [/\b(need|needs|needed|require|requires|required|want) (a |an |some )?([\w.+#-]+ ){0,2}(freelance|freelancer|developer|dev|agency|team|someone|somebody|expert|consultant|designer|engineer|help)/i, 30],
   [/\b(anyone|who) (can|could|knows?) (build|develop|make|create|help|recommend)/i, 25],
   [/\b(recommend|recommendations? for|suggest) (a |an )?(good )?(developer|agency|freelancer|dev shop|team|designer)/i, 25],
   [/\b(build|develop|create|make) (our|my|an?|the) (mvp|app|website|platform|saas|product|dashboard|tool|portal|marketplace|chatbot|ai agent)/i, 20],

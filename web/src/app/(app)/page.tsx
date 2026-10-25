@@ -32,7 +32,9 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<SP
   const status = str(sp.status) || "new";
   const source = str(sp.source);
   const q = str(sp.q).trim();
-  const min = Number(str(sp.min)) || 0;
+  // Cold posts are hidden unless "Any score" is picked.
+  const min = sp.min === undefined ? 40 : Number(str(sp.min)) || 0;
+  const matchesOnly = str(sp.matches) === "1";
   const contact = str(sp.contact) === "1";
   const sort = str(sp.sort) === "newest" ? "newest" : "best";
   const who = str(sp.who);
@@ -50,6 +52,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<SP
   else if (who === "none" && all) query = query.is("assigned_to", null);
   else if (/^[0-9a-f-]{36}$/.test(who)) query = query.eq("assigned_to", who);
   if (contact) query = query.or("emails.neq.,phones.neq.,work_email.not.is.null");
+  if (matchesOnly) query = query.not("matched_search", "is", null);
   if (q) {
     // Characters that mean something in PostgREST filters are dropped from the search text.
     const term = q.replace(/[,()*%\\"]/g, " ").trim();
@@ -92,7 +95,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<SP
 
   const here = (over: Record<string, string>) => {
     const p = new URLSearchParams();
-    const all = { status, source, q, min: min ? String(min) : "", contact: contact ? "1" : "", sort: sort === "newest" ? "newest" : "", who, ...over };
+    const all = { status, source, q, min: String(min), contact: contact ? "1" : "", matches: matchesOnly ? "1" : "", sort: sort === "newest" ? "newest" : "", who, ...over };
     for (const [k, v] of Object.entries(all)) if (v) p.set(k, v);
     const s = p.toString();
     return s ? `/?${s}` : "/";
@@ -103,7 +106,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<SP
     <>
       <PageHeader
         title="Leads"
-        description="Every post from LinkedIn, Reddit and Hacker News, scored. Hot ones sit at the top. Press a name to see the full post and reply."
+        description="Posts that match your searches or score warm, from LinkedIn, Reddit and Hacker News. Hot ones sit at the top. Press a name to see the full post and reply."
         actions={
           <>
             <form action={checkNow}>
@@ -121,7 +124,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<SP
       <Flash searchParams={sp} />
 
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Last 24 hours" value={today} note="Posts saved" />
+        <Stat label="Last 24 hours" value={today} note="Leads saved" />
         <Stat label="Hot today" value={hot} note="At or above your alert score" href={here({ min: "70", status: "all" })} />
         <Stat label="With contact" value={withContact} note="Email or phone found" href={here({ contact: "1" })} />
         <Stat label="All leads" value={total} note={`${counts.won ?? 0} won so far`} href={here({ status: "all" })} />
@@ -133,7 +136,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<SP
         tabs={STATUS_TABS.map((t) => ({ ...t, href: here({ status: t.key }), count: t.key === "all" ? total : (counts[t.key] ?? 0) }))}
       />
 
-      <form className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_150px_140px_150px_140px_auto_auto]" action="/">
+      <form className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[1fr_150px_140px_150px_140px_auto_auto_auto]" action="/">
         <input type="hidden" name="status" value={status} />
         <label className="sr-only" htmlFor="q">Search</label>
         <Input id="q" name="q" defaultValue={q} placeholder="Search posts, names, skills" />
@@ -147,8 +150,9 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<SP
           ))}
         </Select>
         <label className="sr-only" htmlFor="min">Score</label>
-        <Select id="min" name="min" defaultValue={String(min || "")}>
-          <option value="">Any score</option>
+        <Select id="min" name="min" defaultValue={String(min)}>
+          <option value="0">Any score</option>
+          <option value="40">Hide cold</option>
           <option value="50">Warm and hot</option>
           <option value="70">Hot only</option>
         </Select>
@@ -172,6 +176,10 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<SP
         <label className="flex h-12 items-center gap-2 rounded-xl border border-input bg-background px-3 text-[15px] whitespace-nowrap">
           <input type="checkbox" name="contact" value="1" defaultChecked={contact} className="size-5 accent-primary" />
           Has contact
+        </label>
+        <label className="flex h-12 items-center gap-2 rounded-xl border border-input bg-background px-3 text-[15px] whitespace-nowrap">
+          <input type="checkbox" name="matches" value="1" defaultChecked={matchesOnly} className="size-5 accent-primary" />
+          Matches my searches
         </label>
         <button className={buttonClass("secondary", "md", "h-12")}>Filter</button>
       </form>
@@ -223,6 +231,11 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<SP
                       {l.reason ? <p className="font-medium">{l.reason}</p> : null}
                       <p className="mt-0.5 line-clamp-2 text-[13px] text-muted-foreground">{l.text}</p>
                     </Link>
+                    {l.matched_search ? (
+                      <p className="mt-1">
+                        <Badge tone="blue">Matches: {l.matched_search}</Badge>
+                      </p>
+                    ) : null}
                     {l.budget || l.skills ? <p className="mt-1 text-[13px]">{[l.budget, l.skills].filter(Boolean).join(" · ")}</p> : null}
                   </Td>
                   <Td className="min-w-[220px] align-top text-[14px]">
