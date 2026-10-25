@@ -1,0 +1,28 @@
+// Countries for the Search filter, with the city names people put in their LinkedIn location.
+// Used two ways: to widen the Google query, and to confirm each result really mentions the place.
+export const COUNTRIES: Record<string, { name: string; terms: string[] }> = {
+  in: { name: "India", terms: ["India", "Bengaluru", "Bangalore", "Mumbai", "Delhi", "Gurugram", "Gurgaon", "Noida", "Pune", "Hyderabad", "Chennai", "Kolkata", "Ahmedabad", "Jaipur", "Kochi", "Indore", "Chandigarh", "Surat"] },
+  ae: { name: "United Arab Emirates", terms: ["United Arab Emirates", "UAE", "Dubai", "Abu Dhabi", "Sharjah", "Ajman"] },
+  sa: { name: "Saudi Arabia", terms: ["Saudi Arabia", "KSA", "Riyadh", "Jeddah", "Dammam", "Khobar"] },
+  qa: { name: "Qatar", terms: ["Qatar", "Doha"] },
+  uk: { name: "United Kingdom", terms: ["United Kingdom", "UK", "England", "London", "Manchester", "Birmingham", "Leeds", "Glasgow", "Edinburgh", "Bristol"] },
+  us: { name: "United States", terms: ["United States", "USA", "New York", "San Francisco", "Bay Area", "Los Angeles", "Seattle", "Austin", "Chicago", "Boston", "Miami", "Texas", "California"] },
+  ca: { name: "Canada", terms: ["Canada", "Toronto", "Vancouver", "Montreal", "Calgary", "Ottawa"] },
+  au: { name: "Australia", terms: ["Australia", "Sydney", "Melbourne", "Brisbane", "Perth", "Adelaide"] },
+  sg: { name: "Singapore", terms: ["Singapore"] },
+  de: { name: "Germany", terms: ["Germany", "Berlin", "Munich", "Hamburg", "Frankfurt", "Cologne"] },
+  nl: { name: "Netherlands", terms: ["Netherlands", "Amsterdam", "Rotterdam", "Utrecht", "The Hague"] },
+  fr: { name: "France", terms: ["France", "Paris", "Lyon"] },
+  ie: { name: "Ireland", terms: ["Ireland", "Dublin", "Cork"] },
+  nz: { name: "New Zealand", terms: ["New Zealand", "Auckland", "Wellington"] },
+  za: { name: "South Africa", terms: ["South Africa", "Johannesburg", "Cape Town", "Durban"] },
+  ng: { name: "Nigeria", terms: ["Nigeria", "Lagos", "Abuja"] },
+  ke: { name: "Kenya", terms: ["Kenya", "Nairobi"] },
+  pk: { name: "Pakistan", terms: ["Pakistan", "Karachi", "Lahore", "Islamabad"] },
+  bd: { name: "Bangladesh", terms: ["Bangladesh", "Dhaka"] },
+  lk: { name: "Sri Lanka", terms: ["Sri Lanka", "Colombo"] },
+  np: { name: "Nepal", terms: ["Nepal", "Kathmandu"] },
+  my: { name: "Malaysia", terms: ["Malaysia", "Kuala Lumpur", "Penang"] },
+  id: { name: "Indonesia", terms: ["Indonesia", "Jakarta", "Bali"] },
+  ph: { name: "Philippines", terms: ["Philippines", "Manila", "Cebu"] },
+};

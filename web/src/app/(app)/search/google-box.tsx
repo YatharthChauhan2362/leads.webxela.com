@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { saveHitAsLead, saveHitAsPerson } from "./actions";
 import { Card, EmptyState } from "@/components/ui/layout";
 import { THead, Table, Td, Th, Tr } from "@/components/ui/table";
+import { COUNTRIES } from "@/lib/places";
 import { SubmitButton } from "@/components/ui/submit-button";
 
 type Hit = { title: string; link: string; snippet: string };
@@ -25,8 +26,21 @@ function readPerson(h: Hit) {
   const name = parts[0] ?? "";
   const rest = parts.slice(1).join(" - ");
   const at = rest.match(/^(.*?)\s+(?:at|@)\s+(.+)$/i);
-  const place = h.snippet.match(/(?:Location:\s*)?([A-Z][A-Za-z .'-]+,\s*[A-Z][A-Za-z .'-]+(?:,\s*[A-Z][A-Za-z .'-]+)?)/)?.[1] ?? "";
-  return { name, title: at ? at[1] : rest, company: at ? at[2] : parts[2] ?? "", place: place.length < 60 ? place : "" };
+  return { name, title: at ? at[1] : rest, company: at ? at[2] : parts[2] ?? "", place: readPlace(h) };
+}
+
+const hasWord = (text: string, word: string) => new RegExp(`(^|[^A-Za-z])${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^A-Za-z]|$)`).test(text);
+
+/** Only real place names from our country and city list, for example "Bengaluru, India". Never a guess. */
+function readPlace(h: Hit) {
+  const text = `${h.title} ${h.snippet}`;
+  for (const c of Object.values(COUNTRIES)) {
+    const found = c.terms.filter((t) => hasWord(text, t));
+    if (!found.length) continue;
+    const city = found.find((t) => t !== c.name && t.length > 3 && !/^(UAE|USA|UK|KSA)$/.test(t));
+    return city ? `${city}, ${c.name}` : c.name;
+  }
+  return "";
 }
 
 type GoogleResult = { titleNoFormatting?: string; unescapedUrl?: string; url?: string; contentNoFormatting?: string };
@@ -42,18 +56,51 @@ declare global {
  * Google's free Programmable Search box, which needs only the engine ID (no API key).
  * Google fetches the results; we hide its own result box and its ads, and show the results in our design.
  */
-export function GoogleBox({ cx, q, back, kind }: { cx: string; q: string; back: string; kind: string }) {
-  const [hits, setHits] = useState<Hit[] | null>(null);
+export function GoogleBox({
+  cx,
+  q,
+  back,
+  kind,
+  count = 20,
+  confirmTerms = [],
+  confirmedOnly = false,
+  newest = false,
+}: {
+  cx: string;
+  q: string;
+  back: string;
+  kind: string;
+  count?: number;
+  confirmTerms?: string[];
+  confirmedOnly?: boolean;
+  newest?: boolean;
+}) {
+  const [hits, setHits] = useState<(Hit & { confirmed: boolean })[] | null>(null);
+  const [progress, setProgress] = useState("");
   const [error, setError] = useState<string | null>(null);
   const started = useRef(false);
 
   useEffect(() => {
     if (!q || started.current) return;
     started.current = true;
+    const terms = confirmTerms.map((t) => t.toLowerCase());
+    // A place counts as confirmed only when it appears as a whole word in the result.
+    const confirmedIn = (h: Hit) => !terms.length || terms.some((t) => new RegExp(`(^|[^a-z])${t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z]|$)`, "i").test(`${h.title} ${h.snippet}`));
+    const seen = new Set<string>();
+    const kept: (Hit & { confirmed: boolean })[] = [];
+    let page = 1;
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      setHits([...kept]);
+      setProgress("");
+    };
+
     const run = () => {
       const el = window.google?.search?.cse?.element;
       if (!el) return setError("Google search did not load. Check your connection, or turn off an ad blocker for this site.");
-      el.render({ div: "gcse-hidden", tag: "searchresults-only", gname: "leads" });
+      el.render({ div: "gcse-hidden", tag: "searchresults-only", gname: "leads", attributes: newest ? { sort_by: "date" } : {} });
       el.getElement("leads")?.execute(q);
     };
     window.__gcse = {
@@ -63,15 +110,26 @@ export function GoogleBox({ cx, q, back, kind }: { cx: string; q: string; back: 
         web: {
           // Returning true tells Google not to draw its own results. We draw ours.
           ready: (_name: string, _q: string, _promos: unknown, results: GoogleResult[] | undefined) => {
-            setHits(
-              (results ?? [])
-                .map((r) => ({
-                  title: r.titleNoFormatting ?? "",
-                  link: realUrl(r.unescapedUrl ?? r.url ?? ""),
-                  snippet: r.contentNoFormatting ?? "",
-                }))
-                .filter((h) => h.link),
-            );
+            const list = (results ?? [])
+              .map((r) => ({ title: r.titleNoFormatting ?? "", link: realUrl(r.unescapedUrl ?? r.url ?? ""), snippet: r.contentNoFormatting ?? "" }))
+              .filter((h) => h.link && !seen.has(h.link));
+            for (const h of list) {
+              seen.add(h.link);
+              const confirmed = confirmedIn(h);
+              if (!confirmedOnly || confirmed) kept.push({ ...h, confirmed });
+            }
+            setHits([...kept].slice(0, count));
+            // Google gives 10 a page and at most 10 pages. Keep going until we have enough.
+            if (kept.length >= count || (results ?? []).length < 10 || page >= 10) {
+              kept.splice(count);
+              finish();
+            } else {
+              page++;
+              setProgress(`Fetching page ${page} of up to 10. ${kept.length} of ${count} so far...`);
+              setTimeout(() => {
+                location.hash = `gsc.tab=0&gsc.q=${encodeURIComponent(q)}&gsc.page=${page}`;
+              }, 250);
+            }
             return true;
           },
         },
@@ -82,21 +140,29 @@ export function GoogleBox({ cx, q, back, kind }: { cx: string; q: string; back: 
     s.async = true;
     s.onerror = () => setError("Google search did not load. Check your connection, or turn off an ad blocker for this site.");
     document.head.appendChild(s);
-    const t = setTimeout(() => setHits((h) => h ?? []), 15000);
+    // If Google stops answering, show what we have.
+    const t = setTimeout(finish, 60000);
     return () => clearTimeout(t);
-  }, [cx, q]);
+  }, [cx, q, count, confirmTerms, confirmedOnly, newest]);
 
   if (!q) return null;
   if (error) return <EmptyState title="Search did not load" description={error} />;
   return (
     <>
       <div id="gcse-hidden" className="hidden" aria-hidden />
-      {hits === null ? (
-        <p className="text-[15px] text-muted-foreground" role="status">
-          Searching...
+      {progress || hits === null ? (
+        <p className="mb-3 text-[15px] text-muted-foreground" role="status">
+          {progress || "Searching..."}
         </p>
-      ) : hits.length === 0 ? (
-        <EmptyState title="No results" description="Try fewer or different words." />
+      ) : null}
+      {hits && hits.length ? (
+        <p className="mb-3 text-[13px] text-muted-foreground">
+          {hits.length} result{hits.length === 1 ? "" : "s"}
+          {confirmTerms.length ? `, ${hits.filter((h) => h.confirmed).length} with the location confirmed` : ""}
+        </p>
+      ) : null}
+      {hits === null ? null : hits.length === 0 ? (
+        <EmptyState title="No results" description={confirmedOnly ? "Nothing mentioned that place. Untick Confirmed location only, or try a bigger city." : "Try fewer or different words."} />
       ) : kind === "profiles" || kind === "companies" ? (
         <Table>
           <THead>
@@ -117,7 +183,12 @@ export function GoogleBox({ cx, q, back, kind }: { cx: string; q: string; back: 
                   <Td className="min-w-[180px] align-top font-semibold">{p.name || h.title}</Td>
                   <Td className="min-w-[200px] align-top text-[14px]">{kind === "profiles" ? p.title : h.snippet.slice(0, 160)}</Td>
                   {kind === "profiles" ? <Td className="min-w-[140px] align-top text-[14px]">{p.company}</Td> : null}
-                  <Td className="min-w-[140px] align-top text-[14px]">{p.place || <span className="text-muted-foreground">Not shown</span>}</Td>
+                  <Td className="min-w-[140px] align-top text-[14px]">
+                    {p.place || <span className="text-muted-foreground">Not shown</span>}
+                    {confirmTerms.length ? (
+                      <p className={`text-[12.5px] font-semibold ${h.confirmed ? "text-success" : "text-warning"}`}>{h.confirmed ? "Location confirmed" : "Location not confirmed"}</p>
+                    ) : null}
+                  </Td>
                   <Td className="align-top">
                     <a href={h.link} target="_blank" rel="noreferrer" className="text-[14px] font-medium text-primary hover:underline">
                       {kind === "profiles" ? "LinkedIn" : "Open"}
