@@ -19,7 +19,7 @@ export const OPTIONS = preflight;
 
 /** The extension reports in every 5 minutes so the app knows it is connected. */
 export async function POST(req: Request) {
-  const denied = checkKey(req);
+  const denied = await checkKey(req);
   if (denied) return denied;
   const r = Beat.safeParse(await req.json().catch(() => null));
   if (!r.success) return NextResponse.json({ error: "Bad status." }, { status: 400, headers: CORS });

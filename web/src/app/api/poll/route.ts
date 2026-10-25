@@ -6,7 +6,7 @@ export const OPTIONS = preflight;
 
 /** Runs the Reddit and Hacker News check. Called by the built in timer or any outside cron. */
 export async function POST(req: Request) {
-  const denied = checkKey(req);
+  const denied = await checkKey(req);
   if (denied) return denied;
   try {
     return NextResponse.json(await pollSources(), { headers: CORS });

@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { deleteLead, draftReply, saveNotes, setStatus } from "../../actions";
+import { assignLead, deleteLead, draftReply, saveNotes, setStatus } from "@/app/actions";
 import { ContactCell, SOURCES, STATUS_WORDS, ScoreBadge, list } from "@/components/leads";
 import { timeAgo } from "@/components/shell/app-shell";
 import { buttonClass } from "@/components/ui/button";
@@ -16,6 +16,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
   if (!lead) notFound();
   const person = lead.author_url ? (must(await sb().from("profiles").select("*").eq("url", lead.author_url).maybeSingle()) as Profile | null) : null;
   const back = `/leads/${id}`;
+  const people = must(await sb().from("members").select("id, name, email").neq("status", "disabled").order("name")) as { id: string; name: string | null; email: string }[];
 
   return (
     <>
@@ -104,6 +105,27 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
                 { label: "Found", value: `${timeAgo(lead.captured_at)}${lead.posted_at ? `, posted ${/^\d{4}-/.test(lead.posted_at) ? timeAgo(lead.posted_at) : lead.posted_at}` : ""}` },
               ]}
             />
+          </Card>
+
+          <Card>
+            <CardHeader title="Assigned to" description="Who is working this lead." />
+            <form action={assignLead} className="flex gap-2">
+              <input type="hidden" name="id" value={lead.id} />
+              <input type="hidden" name="back" value={back} />
+              <label className="sr-only" htmlFor="member">
+                Assigned to
+              </label>
+              <select id="member" name="member" defaultValue={lead.assigned_to ?? ""} className="h-11 min-w-0 flex-1 rounded-xl border border-input bg-background px-3 text-[15px]">
+                <option value="">Nobody</option>
+                {people.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name || p.email}
+                  </option>
+                ))}
+              </select>
+              <SubmitButton pendingText="Saving...">Save</SubmitButton>
+            </form>
+            {people.length ? null : <p className="mt-2 text-[13px] text-muted-foreground">Invite people on the Team page to assign leads.</p>}
           </Card>
 
           <Card>

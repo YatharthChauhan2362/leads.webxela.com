@@ -1,3 +1,4 @@
+import { checkKey } from "@/lib/api";
 import { must, sb, type Lead } from "@/lib/db";
 
 const COLS: (keyof Lead)[] = [
@@ -10,7 +11,9 @@ function cell(v: unknown) {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = await checkKey(req);
+  if (denied) return denied;
   const rows = must(await sb().from("leads").select("*").order("captured_at", { ascending: false }).limit(10000));
   const csv = [COLS.join(","), ...rows.map((r) => COLS.map((c) => cell(r[c])).join(","))].join("\n");
   return new Response(csv, {

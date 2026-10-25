@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { checkNow, setStatus } from "./actions";
+import { checkNow, setStatus } from "@/app/actions";
 import { ContactCell, SOURCES, STATUS_WORDS, ScoreBadge } from "@/components/leads";
 import { timeAgo } from "@/components/shell/app-shell";
 import { buttonClass } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Badge, EmptyState, PageHeader, Stat, Tabs } from "@/components/ui/layou
 import { SubmitButton } from "@/components/ui/submit-button";
 import { THead, Table, Td, Th, Tr } from "@/components/ui/table";
 import { getSetting, hoursAgo, must, sb, type Lead } from "@/lib/db";
+import { currentMember } from "@/lib/session";
 
 type SP = { [key: string]: string | string[] | undefined };
 
@@ -33,10 +34,15 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<SP
   const min = Number(str(sp.min)) || 0;
   const contact = str(sp.contact) === "1";
   const sort = str(sp.sort) === "newest" ? "newest" : "best";
+  const who = str(sp.who);
+  const me = await currentMember();
 
   let query = sb().from("leads").select("*").gte("score", min);
   if (status !== "all") query = query.eq("status", status);
   if (source) query = query.eq("source", source);
+  if (who === "me" && me) query = query.eq("assigned_to", me.id);
+  else if (who === "none") query = query.is("assigned_to", null);
+  else if (/^[0-9a-f-]{36}$/.test(who)) query = query.eq("assigned_to", who);
   if (contact) query = query.or("emails.neq.,phones.neq.,work_email.not.is.null");
   if (q) {
     // Characters that mean something in PostgREST filters are dropped from the search text.
@@ -48,7 +54,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<SP
       ? query.order("captured_at", { ascending: false })
       : query.order("captured_day", { ascending: false }).order("score", { ascending: false }).order("captured_at", { ascending: false });
 
-  const [leads, stats] = await Promise.all([
+  const [leads, stats, people] = await Promise.all([
     query.limit(300).then((r) => must(r) as Lead[]),
     getSetting("alert_score").then(async (alert) =>
       must(await sb().rpc("lead_stats", { p_since: hoursAgo(24), p_alert: Number(alert) || 70 })) as {
@@ -59,13 +65,15 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<SP
         by_status: Record<string, number>;
       },
     ),
+    sb().from("members").select("id, name, email").neq("status", "disabled").order("name").then((r) => must(r) as { id: string; name: string | null; email: string }[]),
   ]);
+  const nameOf = new Map(people.map((p) => [p.id, p.name || p.email.split("@")[0]]));
   const counts = stats.by_status;
   const { total, today, hot, with_contact: withContact } = stats;
 
   const here = (over: Record<string, string>) => {
     const p = new URLSearchParams();
-    const all = { status, source, q, min: min ? String(min) : "", contact: contact ? "1" : "", sort: sort === "newest" ? "newest" : "", ...over };
+    const all = { status, source, q, min: min ? String(min) : "", contact: contact ? "1" : "", sort: sort === "newest" ? "newest" : "", who, ...over };
     for (const [k, v] of Object.entries(all)) if (v) p.set(k, v);
     const s = p.toString();
     return s ? `/?${s}` : "/";
@@ -104,7 +112,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<SP
         tabs={STATUS_TABS.map((t) => ({ ...t, href: here({ status: t.key }), count: t.key === "all" ? total : (counts[t.key] ?? 0) }))}
       />
 
-      <form className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_160px_150px_150px_auto_auto]" action="/">
+      <form className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_150px_140px_150px_140px_auto_auto]" action="/">
         <input type="hidden" name="status" value={status} />
         <label className="sr-only" htmlFor="q">Search</label>
         <Input id="q" name="q" defaultValue={q} placeholder="Search posts, names, skills" />
@@ -122,6 +130,17 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<SP
           <option value="">Any score</option>
           <option value="50">Warm and hot</option>
           <option value="70">Hot only</option>
+        </Select>
+        <label className="sr-only" htmlFor="who">Assigned to</label>
+        <Select id="who" name="who" defaultValue={who}>
+          <option value="">Anyone</option>
+          {me ? <option value="me">Mine</option> : null}
+          <option value="none">Not assigned</option>
+          {people.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name || p.email}
+            </option>
+          ))}
         </Select>
         <label className="sr-only" htmlFor="sort">Sort</label>
         <Select id="sort" name="sort" defaultValue={sort}>
@@ -158,6 +177,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<SP
                 <Th>What they need</Th>
                 <Th>Contact</Th>
                 <Th>Found</Th>
+                <Th>Assigned</Th>
                 <Th>Status</Th>
               </tr>
             </THead>
@@ -194,6 +214,9 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<SP
                         Open post
                       </a>
                     ) : null}
+                  </Td>
+                  <Td className="align-top text-[14px] whitespace-nowrap">
+                    {l.assigned_to ? nameOf.get(l.assigned_to) ?? "Former member" : <span className="text-muted-foreground">Nobody</span>}
                   </Td>
                   <Td className="align-top">
                     <form action={setStatus} className="flex flex-col gap-1.5">

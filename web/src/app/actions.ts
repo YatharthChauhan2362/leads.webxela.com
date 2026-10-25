@@ -6,6 +6,7 @@ import { z } from "zod";
 import { must, sb, setSettings, type Lead } from "@/lib/db";
 import { aiEnabled, aiText } from "@/lib/ai";
 import { scorePost } from "@/lib/score";
+import { requireMember } from "@/lib/session";
 import { pollSources } from "@/lib/sources";
 
 const STATUSES = ["new", "contacted", "replied", "won", "lost"] as const;
@@ -23,6 +24,7 @@ function back(formData: FormData, msg: string, kind: "ok" | "error" = "ok"): nev
 }
 
 export async function setStatus(formData: FormData) {
+  await requireMember();
   const id = Id.parse(formData.get("id"));
   const status = z.enum(STATUSES).parse(formData.get("status"));
   must(await sb().from("leads").update({ status }).eq("id", id));
@@ -30,6 +32,7 @@ export async function setStatus(formData: FormData) {
 }
 
 export async function saveNotes(formData: FormData) {
+  await requireMember();
   const id = Id.parse(formData.get("id"));
   const notes = z.string().max(5000).parse(formData.get("notes") ?? "");
   must(await sb().from("leads").update({ notes }).eq("id", id));
@@ -37,12 +40,14 @@ export async function saveNotes(formData: FormData) {
 }
 
 export async function deleteLead(formData: FormData) {
+  await requireMember("admin");
   const id = Id.parse(formData.get("id"));
   must(await sb().from("leads").delete().eq("id", id));
   back(formData, "Lead removed.");
 }
 
 export async function draftReply(formData: FormData) {
+  await requireMember();
   const id = Id.parse(formData.get("id"));
   const lead = must(await sb().from("leads").select("*").eq("id", id).maybeSingle()) as Lead | null;
   if (!lead) back(formData, "That lead is gone.", "error");
@@ -72,6 +77,7 @@ function template(first: string, lead: Lead) {
 }
 
 export async function rescoreAll(formData: FormData) {
+  await requireMember("admin");
   const rows = must(await sb().from("leads").select("id, text, author, headline"));
   for (const r of rows) {
     const s = await scorePost(r.text, r.author, r.headline);
@@ -86,6 +92,7 @@ export async function rescoreAll(formData: FormData) {
 }
 
 export async function checkNow(formData: FormData) {
+  await requireMember();
   let msg: string;
   try {
     const r = await pollSources();
@@ -105,6 +112,7 @@ const Settings = z.object({
 });
 
 export async function saveSettings(formData: FormData) {
+  await requireMember("admin");
   const r = Settings.safeParse(Object.fromEntries(formData));
   if (!r.success) back(formData, "Scores must be numbers from 0 to 100.", "error");
   await setSettings(Object.fromEntries(Object.entries(r.data).map(([k, v]) => [k, String(v).replace(/\r/g, "").trim()])));
@@ -112,6 +120,7 @@ export async function saveSettings(formData: FormData) {
 }
 
 export async function addManual(formData: FormData) {
+  await requireMember();
   const { ingestPosts } = await import("@/lib/ingest");
   const text = String(formData.get("text") ?? "").trim();
   if (text.length < 20) back(formData, "Paste the full post text, at least 20 characters.", "error");
@@ -125,4 +134,14 @@ export async function addManual(formData: FormData) {
     },
   ]);
   back(formData, res.added ? "Lead added." : "Not added. It scored below your minimum, or it is already in the list.", res.added ? "ok" : "error");
+}
+
+/** Gives a lead to one team member, or takes it back ("me" assigns it to yourself). */
+export async function assignLead(formData: FormData) {
+  const me = await requireMember();
+  const id = Id.parse(formData.get("id"));
+  const raw = String(formData.get("member") ?? "");
+  const to = raw === "me" ? (me?.id ?? null) : raw ? z.string().uuid().parse(raw) : null;
+  must(await sb().from("leads").update({ assigned_to: to }).eq("id", id));
+  back(formData, to ? "Lead assigned." : "Lead is now unassigned.");
 }

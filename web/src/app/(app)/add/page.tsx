@@ -1,4 +1,4 @@
-import { addManual } from "../actions";
+import { addManual } from "@/app/actions";
 import { Flash } from "@/components/ui/flash";
 import { Field, FormGrid, Input, Textarea } from "@/components/ui/form";
 import { Card, PageHeader } from "@/components/ui/layout";

@@ -50,7 +50,7 @@ function postKey(p: PostIn) {
   return `${p.source}:${createHash("sha1").update(`${p.author}|${p.text.slice(0, 300)}`).digest("hex")}`;
 }
 
-export async function ingestPosts(posts: PostIn[], opts: { force?: boolean } = {}): Promise<{ found: number; added: number }> {
+export async function ingestPosts(posts: PostIn[], opts: { force?: boolean; capturedBy?: string | null } = {}): Promise<{ found: number; added: number }> {
   if (!posts.length) return { found: 0, added: 0 };
   const settings = await getSettings();
   const minScore = Number(settings.min_score) || 0;
@@ -88,6 +88,7 @@ export async function ingestPosts(posts: PostIn[], opts: { force?: boolean } = {
         .from("leads")
         .upsert(
           {
+            captured_by: opts.capturedBy ?? null,
             work_email: profile?.work_email ?? guess?.email ?? null,
             work_email_status: (profile?.work_email_status ?? guess?.status ?? null) as Lead["work_email_status"],
             work_email_confidence: profile?.work_email_confidence ?? guess?.confidence ?? null,

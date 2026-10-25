@@ -1,33 +1,17 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-// One place that decides who gets in. Turned on by APP_PASSWORD (set on Vercel, usually empty locally).
-//   Pages: browser password prompt (any user name, APP_PASSWORD as the password).
-//   /api: the extension's API key (INGEST_KEY) or the same password.
+// Fast first check: once Google or Zoho sign in is set up, pages need a session cookie.
+// The real check (signature, active member, role) runs on every page and action through requireMember().
+// /api routes check the extension key or the session themselves.
+const PUBLIC = [/^\/login/, /^\/auth\//, /^\/api\//, /^\/yatri-leads-extension\.zip$/];
+
 export function proxy(req: NextRequest) {
-  const password = process.env.APP_PASSWORD;
-  if (!password) return NextResponse.next();
-
-  const isApi = req.nextUrl.pathname.startsWith("/api/");
-  if (isApi && req.method === "OPTIONS") return NextResponse.next();
-
-  const key = process.env.INGEST_KEY;
-  const sentKey = req.headers.get("x-api-key") ?? req.headers.get("authorization")?.replace(/^Bearer /, "");
-  if (isApi && key && sentKey === key) return NextResponse.next();
-
-  const basic = req.headers.get("authorization");
-  if (basic?.startsWith("Basic ")) {
-    const decoded = atob(basic.slice(6));
-    if (decoded.slice(decoded.indexOf(":") + 1) === password) return NextResponse.next();
-  }
-
-  return new NextResponse(isApi ? JSON.stringify({ error: "Wrong or missing API key." }) : "Sign in to Yatri Leads.", {
-    status: 401,
-    headers: {
-      ...(isApi
-        ? { "content-type": "application/json", "access-control-allow-origin": "*" }
-        : { "www-authenticate": 'Basic realm="Yatri Leads", charset="UTF-8"' }),
-    },
-  });
+  const authOn = Boolean(process.env.GOOGLE_CLIENT_ID || process.env.ZOHO_CLIENT_ID);
+  const path = req.nextUrl.pathname;
+  if (!authOn || PUBLIC.some((r) => r.test(path))) return NextResponse.next();
+  if (req.cookies.get("yl_session")) return NextResponse.next();
+  const login = new URL("/login", req.url);
+  return NextResponse.redirect(login);
 }
 
 export const config = {

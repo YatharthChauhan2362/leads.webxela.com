@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { CORS, checkKey, preflight } from "@/lib/api";
+import { CORS, apiMember, checkKey, preflight } from "@/lib/api";
 import { PostIn, ProfileIn, ingestPosts, logRun, saveProfile } from "@/lib/ingest";
 
 const Body = z.object({
@@ -11,7 +11,7 @@ const Body = z.object({
 export const OPTIONS = preflight;
 
 export async function POST(req: Request) {
-  const denied = checkKey(req);
+  const denied = await checkKey(req);
   if (denied) return denied;
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
@@ -31,7 +31,7 @@ export async function POST(req: Request) {
     }
   }
 
-  const res = await ingestPosts(posts);
+  const res = await ingestPosts(posts, { capturedBy: (await apiMember(req))?.id });
   if (posts.length) await logRun("extension", res.found, res.added);
   return NextResponse.json({ ...res, profiles }, { headers: CORS });
 }

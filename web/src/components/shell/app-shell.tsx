@@ -1,10 +1,14 @@
 import type { ReactNode } from "react";
 import { Brand } from "@/components/brand";
-import { BLUE_PANEL } from "@/components/ui/layout";
+import { Avatar, BLUE_PANEL } from "@/components/ui/layout";
 import { must, sb } from "@/lib/db";
+import { can, type Member } from "@/lib/session";
 import { MobileMenu, NavLinks, type NavGroup } from "./nav-links";
 
-function nav(newCount: number): NavGroup[] {
+const ROLE_WORDS: Record<string, string> = { owner: "Owner", admin: "Admin", member: "Member" };
+
+function nav(newCount: number, member: Member | null): NavGroup[] {
+  const admin = !member || can(member, "admin");
   return [
     {
       label: "Leads",
@@ -17,9 +21,10 @@ function nav(newCount: number): NavGroup[] {
     {
       label: "Setup",
       items: [
-        { href: "/linkedin", label: "LinkedIn account" },
-        { href: "/settings", label: "Searches and alerts" },
+        ...(admin ? [{ href: "/linkedin", label: "LinkedIn account" }] : []),
         { href: "/extension", label: "Chrome extension" },
+        ...(admin ? [{ href: "/settings", label: "Searches and alerts" }] : []),
+        { href: "/team", label: "Team" },
       ],
     },
   ];
@@ -43,18 +48,34 @@ function StatusCard({ last }: { last: Last }) {
   );
 }
 
-function SideContent({ count, last }: { count: number; last: Last }) {
+function SideContent({ count, last, member }: { count: number; last: Last; member: Member | null }) {
   return (
     <div className="flex min-h-full flex-col gap-6 [&>*]:shrink-0">
       <StatusCard last={last} />
       <nav aria-label="Main">
-        <NavLinks groups={nav(count)} />
+        <NavLinks groups={nav(count, member)} />
       </nav>
+      {member ? (
+        <div className="mt-auto space-y-2 border-t border-border pt-4">
+          <div className="flex min-h-[44px] items-center gap-3 rounded-xl p-2">
+            <Avatar name={member.name || member.email} />
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-medium">{member.name || member.email}</span>
+              <span className="block truncate text-[13px] text-muted-foreground">{ROLE_WORDS[member.role]}</span>
+            </span>
+          </div>
+          <form action="/auth/signout" method="post">
+            <button className="min-h-[44px] w-full rounded-xl border border-border px-3 text-left text-sm font-medium text-muted-foreground transition-colors hover:border-danger hover:bg-danger hover:text-white">
+              Sign out
+            </button>
+          </form>
+        </div>
+      ) : null}
     </div>
   );
 }
 
-export async function AppShell({ children }: { children: ReactNode }) {
+export async function AppShell({ children, member }: { children: ReactNode; member: Member | null }) {
   const [newLeads, lastRun] = await Promise.all([
     sb().from("leads").select("id", { count: "exact", head: true }).eq("status", "new"),
     sb().from("runs").select("at, added").order("id", { ascending: false }).limit(1).maybeSingle(),
@@ -68,17 +89,17 @@ export async function AppShell({ children }: { children: ReactNode }) {
           <Brand />
         </div>
         <div className="flex-1 overflow-y-auto p-4">
-          <SideContent count={count} last={last} />
+          <SideContent count={count} last={last} member={member} />
         </div>
       </aside>
       <div className="min-w-0">
         <header className="no-print sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background px-4 lg:hidden">
           <Brand />
           <MobileMenu label="Open menu">
-            <SideContent count={count} last={last} />
+            <SideContent count={count} last={last} member={member} />
           </MobileMenu>
         </header>
-        <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-10 lg:py-10">{children}</main>
+        <main className="mx-auto w-full max-w-[1760px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>
       </div>
     </div>
   );

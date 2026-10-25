@@ -5,6 +5,7 @@ import { timeAgo } from "@/components/shell/app-shell";
 import { Flash } from "@/components/ui/flash";
 import { Badge, Callout, Card, CardHeader, DescriptionList, PageHeader } from "@/components/ui/layout";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { requireMember } from "@/lib/session";
 import { lastLogLines, readExtensionStatus, readStatus, workerRunning, type ExtensionStatus } from "@/lib/linkedin-worker";
 
 const STATE: Record<string, { word: string; tone: "green" | "amber" | "red" | "blue" | "neutral" }> = {
@@ -17,6 +18,7 @@ const STATE: Record<string, { word: string; tone: "green" | "amber" | "red" | "b
 };
 
 export default async function LinkedInPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  await requireMember("admin");
   const s = readStatus();
   const running = workerRunning();
   const state = STATE[s.state ?? ""] ?? { word: "Not connected", tone: "neutral" as const };

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { buttonClass } from "@/components/ui/button";
 import { Callout, Card, PageHeader } from "@/components/ui/layout";
+import { currentMember } from "@/lib/session";
 
 const STEPS = [
   { title: "Open the extensions page", body: "In Chrome, go to chrome://extensions and turn on Developer mode at the top right." },
@@ -12,7 +13,8 @@ const STEPS = [
   { title: "Turn on watch mode if you want", body: "Watch mode opens your saved searches in a background tab every 30 minutes. Keep the daily page limit low." },
 ];
 
-export default function ExtensionPage() {
+export default async function ExtensionPage() {
+  const me = await currentMember();
   return (
     <>
       <PageHeader
@@ -29,6 +31,16 @@ export default function ExtensionPage() {
           </>
         }
       />
+      {me?.api_key ? (
+        <Card className="mb-6">
+          <p className="text-[16px] font-semibold">Your extension key</p>
+          <p className="mt-0.5 text-[15px] text-muted-foreground">In the extension, open Auto check and settings, paste this into API key, and press Save settings.</p>
+          <label className="sr-only" htmlFor="ext-key">
+            Your extension key
+          </label>
+          <input id="ext-key" readOnly value={me.api_key} className="mt-3 block h-12 w-full rounded-xl border border-input bg-background px-3 font-mono text-[13px]" />
+        </Card>
+      ) : null}
       <ol className="space-y-3">
         {STEPS.map((s, i) => (
           <li key={s.title}>

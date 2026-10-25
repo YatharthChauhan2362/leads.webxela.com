@@ -1,4 +1,4 @@
-const DEFAULTS = { server: "https://leads-webxela-com.vercel.app", apiKey: "", capture: true, watch: true, every: 30, dailyCap: 80, stats: {}, lastError: "", lastWatch: null };
+const DEFAULTS = { server: "https://leads.webxela.com", apiKey: "", capture: true, watch: true, every: 30, dailyCap: 80, stats: {}, lastError: "", lastWatch: null };
 const $ = (id) => document.getElementById(id);
 const today = () => new Date().toISOString().slice(0, 10);
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
