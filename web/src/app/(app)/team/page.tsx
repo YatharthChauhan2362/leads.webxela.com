@@ -65,8 +65,35 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
 
       {admin ? (
         <Card className="mb-6">
-          <CardHeader title="Invite someone" description="They sign in with the Google or Zoho account that uses this email." />
+          <CardHeader title="Invite someone" description="Pick how they sign in, then enter the email of that Google or Zoho account." />
           <form action={invite} className="space-y-5">
+            <fieldset>
+              <legend className="mb-2 text-sm font-medium">1. How will they sign in?</legend>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {allProviders.map((p) => {
+                  const on = providerEnabled(p);
+                  return (
+                    <label
+                      key={p}
+                      className={`flex min-h-[64px] items-center gap-3 rounded-2xl border px-4 py-3 transition-colors has-[:checked]:border-primary has-[:checked]:ring-2 has-[:checked]:ring-primary/30 ${
+                        on ? "cursor-pointer border-border bg-background hover:border-primary" : "cursor-not-allowed border-border bg-muted opacity-60"
+                      }`}
+                    >
+                      <input type="radio" name="login_with" value={p} required disabled={!on} defaultChecked={on && providers[0] === p} className="size-5 accent-primary" />
+                      <ProviderLogo provider={p} size={24} />
+                      <span className="min-w-0">
+                        <span className="block text-[16px] font-semibold">{PROVIDER_WORDS[p]}</span>
+                        <span className="block text-[13px] text-muted-foreground">
+                          {on ? (p === "zoho" ? "For Zoho Mail accounts, like info@webxela.com" : "For Gmail or Google Workspace accounts") : "Not set up yet"}
+                        </span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="mt-1.5 text-[13px] text-muted-foreground">They can only sign in this way. You can change it later.</p>
+            </fieldset>
+            <p className="text-sm font-medium">2. Who are they?</p>
             <FormGrid cols={2}>
               <Field label="Email" htmlFor="email">
                 <Input id="email" name="email" type="email" required placeholder="name@company.com" />
@@ -79,16 +106,6 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
                   {roleOptions.map((r) => (
                     <option key={r} value={r}>
                       {ROLE_WORDS[r]}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Signs in with" htmlFor="login_with" hint={providers.length < 2 ? `Only ${providers.map((p) => PROVIDER_WORDS[p]).join(" and ") || "no option"} is set up so far.` : "They can only sign in this way."}>
-                <Select id="login_with" name="login_with" defaultValue={providers[0] ?? "google"}>
-                  {allProviders.map((p) => (
-                    <option key={p} value={p} disabled={!providerEnabled(p)}>
-                      {PROVIDER_WORDS[p]}
-                      {providerEnabled(p) ? "" : " (not set up yet)"}
                     </option>
                   ))}
                 </Select>
