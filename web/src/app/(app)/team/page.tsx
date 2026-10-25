@@ -15,8 +15,8 @@ import { authEnabled, requireMember, type Member } from "@/lib/session";
 type Team = { id: string; name: string };
 
 const ROLE_WORDS: Record<string, string> = { owner: "Owner", admin: "Admin", member: "Member" };
-const ROLE_HELP = "Owner: everything. Admin: invites people, edits searches, deletes leads. Member: works leads.";
-const JOB_HELP = "Lead generators find and qualify leads. BDEs get hot leads handed to them and follow up.";
+const ROLE_HELP = "Admins manage the team and settings. Members work leads.";
+const JOB_HELP = "BDEs get hot leads handed to them.";
 
 export default async function TeamPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const me = await requireMember("admin");
@@ -121,18 +121,20 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
                   ))}
                 </Select>
               </Field>
-              <Field label="Team" htmlFor="team_id" optional hint="Pick a team, or type a new team name below.">
-                <Select id="team_id" name="team_id" defaultValue="">
-                  <option value="">No team</option>
-                  {teams.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Or create a new team" htmlFor="new_team" optional hint="Leave empty to use the team picked above.">
-                <Input id="new_team" name="new_team" placeholder="For example India sales" maxLength={60} />
+              {teams.length ? (
+                <Field label="Team" htmlFor="team_id" optional>
+                  <Select id="team_id" name="team_id" defaultValue="">
+                    <option value="">None</option>
+                    {teams.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              ) : null}
+              <Field label={teams.length ? "Or a new team" : "Team"} htmlFor="new_team" optional>
+                <Input id="new_team" name="new_team" placeholder="India sales" maxLength={60} />
               </Field>
             </FormGrid>
             <SubmitButton pendingText="Inviting...">Invite</SubmitButton>
@@ -147,25 +149,26 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
         <THead>
           <tr>
             <Th>Person</Th>
-            <Th>Role and team</Th>
-            <Th>Access</Th>
-            <Th>Leads</Th>
-            <Th>Automatic features</Th>
-            {admin ? <Th>Actions</Th> : null}
+            <Th>Role</Th>
+            <Th>Sign in</Th>
+            <Th>Job</Th>
+            {teams.length ? <Th>Team</Th> : null}
+            <Th>Status</Th>
+            <Th align="right">Leads</Th>
+            <Th>Auto</Th>
+            <Th>Actions</Th>
           </tr>
         </THead>
         <tbody>
-          {members.length === 0 ? (
-            <Tr>
-              <Td className="text-muted-foreground">Nobody yet. The owner is added the first time they sign in.</Td>
-            </Tr>
-          ) : null}
           {members.map((m) => {
             const self = m.id === me?.id;
             const locked = !owner && (m.role === "owner" || m.role === "admin");
+            const editable = admin && !locked && !self;
+            const formId = `m-${m.id}`;
+            const select = "h-11 rounded-xl border border-input bg-background px-2 text-[14px]";
             return (
               <Tr key={m.id}>
-                <Td className="min-w-[220px] align-top">
+                <Td className="min-w-[220px] align-middle">
                   <div className="flex items-center gap-3">
                     <Avatar name={m.name || m.email} />
                     <div className="min-w-0">
@@ -174,126 +177,128 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
                         {self ? <span className="ml-1 text-[13px] font-normal text-muted-foreground">(you)</span> : null}
                       </p>
                       <p className="text-[13px] break-all text-muted-foreground">{m.email}</p>
-                      <p className="mt-1 flex items-center gap-1.5 text-[13px]">
-                        <ProviderLogo provider={m.login_with} size={14} />
-                        Signs in with {PROVIDER_WORDS[m.login_with]}
-                      </p>
                     </div>
                   </div>
                 </Td>
-                <Td className="min-w-[230px] align-top">
-                  {admin && !locked && !self ? (
-                    <form action={updateMember} className="flex flex-wrap gap-2">
-                      <input type="hidden" name="id" value={m.id} />
-                      <label className="sr-only" htmlFor={`role-${m.id}`}>
-                        Role for {m.email}
-                      </label>
-                      <select id={`role-${m.id}`} name="role" defaultValue={m.role} className="h-11 rounded-xl border border-input bg-background px-2 text-[14px]">
-                        {(owner ? ["member", "admin", "owner"] : ["member"]).map((r) => (
-                          <option key={r} value={r}>
-                            {ROLE_WORDS[r]}
-                          </option>
-                        ))}
-                      </select>
-                      <label className="sr-only" htmlFor={`login-${m.id}`}>
-                        Sign in method for {m.email}
-                      </label>
-                      <select id={`login-${m.id}`} name="login_with" defaultValue={m.login_with} className="h-11 rounded-xl border border-input bg-background px-2 text-[14px]">
-                        {allProviders.map((p) => (
-                          <option key={p} value={p}>
-                            {PROVIDER_WORDS[p]}
-                          </option>
-                        ))}
-                      </select>
-                      <label className="sr-only" htmlFor={`job-${m.id}`}>
-                        Job for {m.email}
-                      </label>
-                      <select id={`job-${m.id}`} name="job" defaultValue={m.job} className="h-11 rounded-xl border border-input bg-background px-2 text-[14px]">
-                        {Object.entries(JOB_WORDS).map(([k, v]) => (
-                          <option key={k} value={k}>
-                            {v}
-                          </option>
-                        ))}
-                      </select>
-                      <label className="sr-only" htmlFor={`team-${m.id}`}>
-                        Team for {m.email}
-                      </label>
-                      <select id={`team-${m.id}`} name="team_id" defaultValue={m.team_id ?? ""} className="h-11 min-w-0 rounded-xl border border-input bg-background px-2 text-[14px]">
-                        <option value="">No team</option>
+                <Td className="align-middle">
+                  {editable ? (
+                    <select form={formId} name="role" defaultValue={m.role} aria-label={`Role for ${m.email}`} className={select}>
+                      {roleOptions.map((r) => (
+                        <option key={r} value={r}>
+                          {ROLE_WORDS[r]}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <Badge tone={m.role === "owner" ? "ink" : m.role === "admin" ? "blue" : "neutral"}>{ROLE_WORDS[m.role]}</Badge>
+                  )}
+                </Td>
+                <Td className="align-middle">
+                  {editable ? (
+                    <select form={formId} name="login_with" defaultValue={m.login_with} aria-label={`Sign in for ${m.email}`} className={select}>
+                      {allProviders.map((p) => (
+                        <option key={p} value={p}>
+                          {PROVIDER_WORDS[p]}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-[14px]">
+                      <ProviderLogo provider={m.login_with} size={16} />
+                      {PROVIDER_WORDS[m.login_with]}
+                    </span>
+                  )}
+                </Td>
+                <Td className="align-middle">
+                  {editable ? (
+                    <select form={formId} name="job" defaultValue={m.job} aria-label={`Job for ${m.email}`} className={select}>
+                      {Object.entries(JOB_WORDS).map(([k, v]) => (
+                        <option key={k} value={k}>
+                          {v}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="text-[14px]">{JOB_WORDS[m.job]}</span>
+                  )}
+                </Td>
+                {teams.length ? (
+                  <Td className="align-middle">
+                    {editable ? (
+                      <select form={formId} name="team_id" defaultValue={m.team_id ?? ""} aria-label={`Team for ${m.email}`} className={select}>
+                        <option value="">None</option>
                         {teams.map((t) => (
                           <option key={t.id} value={t.id}>
                             {t.name}
                           </option>
                         ))}
                       </select>
-                      <SubmitButton variant="secondary" size="sm" pendingText="Saving...">
-                        Save
-                      </SubmitButton>
-                    </form>
-                  ) : (
-                    <div className="flex flex-wrap gap-1.5">
-                      <Badge tone={m.role === "owner" ? "ink" : m.role === "admin" ? "blue" : "neutral"}>{ROLE_WORDS[m.role]}</Badge>
-                      <Badge>{JOB_WORDS[m.job]}</Badge>
-                      {m.team_id ? <Badge>{teamName.get(m.team_id)}</Badge> : null}
-                    </div>
-                  )}
-                </Td>
-                <Td className="align-top whitespace-nowrap">
-                  <Badge tone={m.status === "active" ? "green" : m.status === "invited" ? "amber" : "red"}>
-                    {m.status === "active" ? "Active" : m.status === "invited" ? "Invited" : "Turned off"}
-                  </Badge>
-                  <p className="mt-1 text-[13px] text-muted-foreground">{m.last_login_at ? `Last signed in ${timeAgo(m.last_login_at)}` : "Not signed in yet"}</p>
-                  {admin ? (
-                    <Link href={`/activity?who=${m.id}`} className="mt-1 inline-flex min-h-[32px] items-center text-[13px] font-medium text-primary hover:underline">
-                      See activity
-                    </Link>
-                  ) : null}
-                </Td>
-                <Td className="align-top">{leadCount.get(m.id) ?? 0}</Td>
-                <Td className="min-w-[200px] align-top">
-                  <Badge tone={m.auto_access ? "green" : "neutral"}>{m.auto_access ? "On" : "Off"}</Badge>
-                  <p className="mt-1 text-[12.5px] text-muted-foreground">Extension timer, their searches in the Claude routine, AI drafts.</p>
-                  {!locked ? (
-                    <form action={setAutoAccess} className="mt-1">
-                      <input type="hidden" name="id" value={m.id} />
-                      <input type="hidden" name="on" value={m.auto_access ? "0" : "1"} />
-                      <SubmitButton variant="secondary" size="sm" pendingText="Saving...">
-                        {m.auto_access ? "Turn off" : "Turn on"}
-                      </SubmitButton>
-                    </form>
-                  ) : null}
-                </Td>
-                {admin ? (
-                  <Td className="align-top">
-                    {!self && !locked ? (
-                      <div className="flex flex-wrap gap-2">
-                        <form action={setAccess}>
-                          <input type="hidden" name="id" value={m.id} />
-                          <input type="hidden" name="on" value={m.status === "disabled" ? "1" : "0"} />
-                          <SubmitButton variant="secondary" size="sm" pendingText="Saving...">
-                            {m.status === "disabled" ? "Turn on" : "Turn off"}
-                          </SubmitButton>
-                        </form>
-                        <form action={removeMember}>
-                          <input type="hidden" name="id" value={m.id} />
-                          <SubmitButton variant="danger" size="sm" pendingText="Removing..." confirm={`Remove ${m.email} from the team?`}>
-                            Remove
-                          </SubmitButton>
-                        </form>
-                      </div>
                     ) : (
-                      <span className="text-[13px] text-muted-foreground">{self ? "This is you" : "Owner only"}</span>
+                      <span className="text-[14px]">{m.team_id ? teamName.get(m.team_id) : "None"}</span>
                     )}
                   </Td>
                 ) : null}
+                <Td className="align-middle whitespace-nowrap">
+                  <Badge tone={m.status === "active" ? "green" : m.status === "invited" ? "amber" : "red"}>
+                    {m.status === "active" ? "Active" : m.status === "invited" ? "Invited" : "Off"}
+                  </Badge>
+                  <p className="mt-1 text-[12.5px] text-muted-foreground">{m.last_login_at ? timeAgo(m.last_login_at) : "Never signed in"}</p>
+                </Td>
+                <Td align="right" className="align-middle">
+                  <Link href={`/activity?who=${m.id}`} className="font-medium text-primary hover:underline" title="See activity">
+                    {leadCount.get(m.id) ?? 0}
+                  </Link>
+                </Td>
+                <Td className="align-middle">
+                  {editable ? (
+                    <form action={setAutoAccess}>
+                      <input type="hidden" name="id" value={m.id} />
+                      <input type="hidden" name="on" value={m.auto_access ? "0" : "1"} />
+                      <SubmitButton variant={m.auto_access ? "primary" : "secondary"} size="sm" pendingText="..." aria-label={`Automatic features for ${m.email}: ${m.auto_access ? "on, press to turn off" : "off, press to turn on"}`}>
+                        {m.auto_access ? "On" : "Off"}
+                      </SubmitButton>
+                    </form>
+                  ) : (
+                    <Badge tone={m.auto_access ? "green" : "neutral"}>{m.auto_access ? "On" : "Off"}</Badge>
+                  )}
+                </Td>
+                <Td className="align-middle">
+                  {editable ? (
+                    <div className="flex flex-nowrap gap-2">
+                      <form id={formId} action={updateMember}>
+                        <input type="hidden" name="id" value={m.id} />
+                        {!teams.length ? <input type="hidden" name="team_id" value="" /> : null}
+                        <SubmitButton size="sm" pendingText="Saving...">
+                          Save
+                        </SubmitButton>
+                      </form>
+                      <form action={setAccess}>
+                        <input type="hidden" name="id" value={m.id} />
+                        <input type="hidden" name="on" value={m.status === "disabled" ? "1" : "0"} />
+                        <SubmitButton variant="secondary" size="sm" pendingText="...">
+                          {m.status === "disabled" ? "Allow" : "Block"}
+                        </SubmitButton>
+                      </form>
+                      <form action={removeMember}>
+                        <input type="hidden" name="id" value={m.id} />
+                        <SubmitButton variant="danger" size="sm" pendingText="..." confirm={`Remove ${m.email}?`}>
+                          Remove
+                        </SubmitButton>
+                      </form>
+                    </div>
+                  ) : (
+                    <span className="text-[13px] text-muted-foreground">{self ? "You" : "Owner only"}</span>
+                  )}
+                </Td>
               </Tr>
             );
           })}
         </tbody>
       </Table>
+      <p className="mt-2 text-[13px] text-muted-foreground">Auto: extension timer, their searches in the Claude routine and AI drafts. The leads number opens their activity.</p>
 
       <Card className="mt-6">
-        <CardHeader title="Teams" description="Group people, for example by country or by service." />
+        <CardHeader title="Teams" />
         {teams.length ? (
           <ul className="mb-5 divide-y divide-border">
             {teams.map((t) => (
