@@ -16,7 +16,13 @@ export async function pickBde(): Promise<{ id: string; email: string; name: stri
 
 export async function assignTo(leadId: number, memberId: string | null) {
   const lead = must(
-    await sb().from("leads").update({ assigned_to: memberId, assigned_at: memberId ? new Date().toISOString() : null }).eq("id", leadId).select("id, author, reason, score").single(),
+    await sb()
+      .from("leads")
+      // Giving a find to someone makes it a lead.
+      .update({ assigned_to: memberId, assigned_at: memberId ? new Date().toISOString() : null, ...(memberId ? { is_lead: true } : {}) })
+      .eq("id", leadId)
+      .select("id, author, reason, score")
+      .single(),
   ) as { id: number; author: string | null; reason: string | null; score: number };
   if (!memberId) return;
   // Tell them right away: bell, desktop popup through their extension, and an email.

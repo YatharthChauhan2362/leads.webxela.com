@@ -43,6 +43,8 @@ export async function POST(req: Request) {
   }
   if (!lead) return NextResponse.json({ error: "Could not save this person." }, { status: 500, headers: CORS });
   const link = `${appUrl()}/leads/${lead.id}`;
+  // Anything done from the extension's menu makes this person a lead.
+  must(await sb().from("leads").update({ is_lead: true }).eq("id", lead.id));
 
   if (r.data.action === "bde") {
     const bde = await pickBde();

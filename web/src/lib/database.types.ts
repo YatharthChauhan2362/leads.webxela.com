@@ -138,6 +138,7 @@ export type Database = {
           headline: string | null
           id: number
           intent: string | null
+          is_lead: boolean
           matched_search: string | null
           notes: string
           phones: string
@@ -176,6 +177,7 @@ export type Database = {
           headline?: string | null
           id?: never
           intent?: string | null
+          is_lead?: boolean
           matched_search?: string | null
           notes?: string
           phones?: string
@@ -214,6 +216,7 @@ export type Database = {
           headline?: string | null
           id?: never
           intent?: string | null
+          is_lead?: boolean
           matched_search?: string | null
           notes?: string
           phones?: string

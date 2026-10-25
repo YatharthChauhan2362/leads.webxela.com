@@ -87,7 +87,14 @@ export async function ingestPosts(posts: PostIn[], opts: { force?: boolean; capt
   let added = 0;
 
   for (const { p, key } of keyed) {
-    if (known.has(key)) continue;
+    if (known.has(key)) {
+      // Saving a daily find by hand turns it into a lead.
+      if (opts.force) {
+        const up = must(await sb().from("leads").update({ is_lead: true }).eq("post_key", key).eq("is_lead", false).select("id")) as { id: number }[];
+        added += up.length;
+      }
+      continue;
+    }
     known.add(key);
     const authorUrl = p.source === "linkedin" ? cleanProfileUrl(p.authorUrl) : (p.authorUrl ?? null);
     const s = await scorePost(p.text, p.author, p.headline);
@@ -130,6 +137,8 @@ export async function ingestPosts(posts: PostIn[], opts: { force?: boolean; capt
         .upsert(
           {
             captured_by: opts.capturedBy ?? null,
+            // Saved by a person: a lead. Collected automatically: a daily find.
+            is_lead: Boolean(opts.force),
             matched_search: matched,
             work_email: profile?.work_email ?? guess?.email ?? null,
             work_email_status: (profile?.work_email_status ?? guess?.status ?? null) as Lead["work_email_status"],

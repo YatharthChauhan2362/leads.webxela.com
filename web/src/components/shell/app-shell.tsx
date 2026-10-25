@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Brand } from "@/components/brand";
 import { Avatar, BLUE_PANEL } from "@/components/ui/layout";
 import { getBrand } from "@/lib/brand";
-import { must, sb } from "@/lib/db";
+import { hoursAgo, must, sb } from "@/lib/db";
 import { can, type Member } from "@/lib/session";
 import { MobileMenu, NavLinks, type NavGroup } from "./nav-links";
 import { ActivityTracker } from "./activity-tracker";
@@ -10,7 +10,7 @@ import { Suspense } from "react";
 
 const ROLE_WORDS: Record<string, string> = { owner: "Owner", admin: "Admin", member: "Member" };
 
-function nav(newCount: number, member: Member | null, unread = 0): NavGroup[] {
+function nav(newCount: number, member: Member | null, unread = 0, findCount = 0): NavGroup[] {
   const admin = !member || can(member, "admin");
   return [
     {
@@ -20,6 +20,7 @@ function nav(newCount: number, member: Member | null, unread = 0): NavGroup[] {
         { href: "/notifications", label: "Notifications", count: unread },
         { href: "/search", label: "Search" },
         { href: "/", label: "Leads", count: newCount },
+        { href: "/finds", label: "Daily finds", count: findCount },
         { href: "/people", label: "People" },
       ],
     },
@@ -56,12 +57,12 @@ function StatusCard({ last, company }: { last: Last; company: string }) {
   );
 }
 
-function SideContent({ count, last, member, company, unread }: { count: number; last: Last; member: Member | null; company: string; unread: number }) {
+function SideContent({ count, last, member, company, unread, finds }: { count: number; last: Last; member: Member | null; company: string; unread: number; finds: number }) {
   return (
     <div className="flex min-h-full flex-col gap-6 [&>*]:shrink-0">
       <StatusCard last={last} company={company} />
       <nav aria-label="Main">
-        <NavLinks groups={nav(count, member, unread)} />
+        <NavLinks groups={nav(count, member, unread, finds)} />
       </nav>
       {member ? (
         <div className="mt-auto space-y-2 border-t border-border pt-4">
@@ -87,12 +88,16 @@ export async function AppShell({ children, member }: { children: ReactNode; memb
   const [newLeads, lastRun] = await Promise.all([
     // Members only count their own new leads.
     (member && !can(member, "admin")
-      ? sb().from("leads").select("id", { count: "exact", head: true }).eq("status", "new").or(`assigned_to.eq.${member.id},captured_by.eq.${member.id}`)
-      : sb().from("leads").select("id", { count: "exact", head: true }).eq("status", "new")),
+      ? sb().from("leads").select("id", { count: "exact", head: true }).eq("is_lead", true).eq("status", "new").or(`assigned_to.eq.${member.id},captured_by.eq.${member.id}`)
+      : sb().from("leads").select("id", { count: "exact", head: true }).eq("is_lead", true).eq("status", "new")),
     sb().from("runs").select("at, added").order("id", { ascending: false }).limit(1).maybeSingle(),
   ]);
   const count = newLeads.count ?? 0;
   const brand = await getBrand();
+  // New daily finds in the last 24 hours, for the menu.
+  let findQuery = sb().from("leads").select("id", { count: "exact", head: true }).eq("is_lead", false).gte("captured_at", hoursAgo(24));
+  if (member && !can(member, "admin")) findQuery = findQuery.or(`assigned_to.eq.${member.id},captured_by.eq.${member.id}`);
+  const finds = (await findQuery).count ?? 0;
   const unread = member ? ((await sb().from("notifications").select("id", { count: "exact", head: true }).eq("member_id", member.id).is("read_at", null)).count ?? 0) : 0;
   const last = must(lastRun) as Last;
   return (
@@ -107,14 +112,14 @@ export async function AppShell({ children, member }: { children: ReactNode; memb
           <Brand />
         </div>
         <div className="flex-1 overflow-y-auto p-4">
-          <SideContent count={count} last={last} member={member} company={brand.company} unread={unread} />
+          <SideContent count={count} last={last} member={member} company={brand.company} unread={unread} finds={finds} />
         </div>
       </aside>
       <div className="min-w-0">
         <header className="no-print sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background px-4 lg:hidden">
           <Brand />
           <MobileMenu label="Open menu">
-            <SideContent count={count} last={last} member={member} company={brand.company} unread={unread} />
+            <SideContent count={count} last={last} member={member} company={brand.company} unread={unread} finds={finds} />
           </MobileMenu>
         </header>
         <main className="mx-auto w-full max-w-[1760px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>

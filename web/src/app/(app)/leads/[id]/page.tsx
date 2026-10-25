@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { assignLead, deleteLeads, draftReply, handToBde, saveNotes, setFollowUp, setStatus, updateLead } from "@/app/actions";
+import { addToLeads, assignLead, deleteLeads, draftReply, handToBde, saveNotes, setFollowUp, setStatus, updateLead } from "@/app/actions";
 import { Field, FormGrid, Input } from "@/components/ui/form";
 import { requireLeadAccess, seesAll } from "@/lib/access";
 import { currentMember } from "@/lib/session";
@@ -30,9 +30,16 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
       <PageHeader
         title={lead.author || "Unknown"}
         description={lead.headline || SOURCES[lead.source] || lead.source}
-        back={{ href: "/", label: "leads" }}
+        back={lead.is_lead ? { href: "/", label: "leads" } : { href: "/finds", label: "daily finds" }}
         actions={
           <>
+            {!lead.is_lead ? (
+              <form action={addToLeads}>
+                <input type="hidden" name="ids" value={lead.id} />
+                <input type="hidden" name="back" value={back} />
+                <SubmitButton pendingText="Adding...">Add to leads</SubmitButton>
+              </form>
+            ) : null}
             {lead.post_url ? (
               <a href={lead.post_url} target="_blank" rel="noreferrer" className={buttonClass("primary")}>
                 Open post

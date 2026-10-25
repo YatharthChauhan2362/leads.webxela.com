@@ -38,7 +38,7 @@ export async function setStatus(formData: FormData) {
   must(
     await sb()
       .from("leads")
-      .update({ status, ...(status === "contacted" ? { contacted_at: now } : {}), ...(status === "won" ? { won_at: now } : {}) })
+      .update({ status, is_lead: true, ...(status === "contacted" ? { contacted_at: now } : {}), ...(status === "won" ? { won_at: now } : {}) })
       .eq("id", id),
   );
   await logActivity(me, "status", { target: `lead ${id}`, detail: status });
@@ -204,7 +204,7 @@ export async function setFollowUp(formData: FormData) {
   await requireLeadAccess(me, id);
   const raw = String(formData.get("follow_up_at") ?? "");
   const date = raw ? z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(raw) : null;
-  must(await sb().from("leads").update({ follow_up_at: date }).eq("id", id));
+  must(await sb().from("leads").update({ follow_up_at: date, ...(date ? { is_lead: true } : {}) }).eq("id", id));
   await logActivity(me, "status", { target: `lead ${id}`, detail: date ? `Follow up on ${date}` : "Follow up cleared" });
   back(formData, date ? "Follow up date saved." : "Follow up date cleared.");
 }
@@ -379,4 +379,15 @@ export async function deleteNotifications(formData: FormData) {
   if (id) q = q.eq("id", Id.parse(id));
   must(await q);
   back(formData, id ? "Removed." : "All cleared.");
+}
+
+/** Moves daily finds into Leads. */
+export async function addToLeads(formData: FormData) {
+  const me = await requireMember();
+  const ids = formData.getAll("ids").map((v) => Id.parse(v));
+  if (!ids.length) back(formData, "Tick the finds to add first.", "error");
+  for (const id of ids) await requireLeadAccess(me, id);
+  const moved = must(await sb().from("leads").update({ is_lead: true }).in("id", ids).select("id")) as { id: number }[];
+  await logActivity(me, "add_post", { detail: `Added ${moved.length} daily find${moved.length === 1 ? "" : "s"} to leads` });
+  back(formData, `Added ${moved.length} to leads.`);
 }
