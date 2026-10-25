@@ -153,8 +153,13 @@
     if (own && !authorUrl) authorUrl = `https://www.linkedin.com/in/${own[1]}/`;
     if (!author && own) author = clean(document.querySelector("h1, h3")?.innerText || "").split("\n")[0];
 
+    // The author's small photo next to the post.
+    const face = box.querySelector(".update-components-actor__image img, img.update-components-actor__avatar-image, .update-components-actor__container img, a[href*='/in/'] img");
+    const authorPhoto = face && /^https:/.test(face.src) && !/ghost|static\.licdn\.com\/aero/i.test(face.src) ? face.src : null;
+
     return {
       source: "linkedin",
+      authorPhoto,
       postId: urn,
       postUrl: `https://www.linkedin.com/feed/update/${urn}/`,
       author: author || null,

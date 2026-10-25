@@ -8,6 +8,7 @@ import { sendLeadEmail } from "./alerts";
 import { assignTo, pickBde } from "./assign";
 import { notifyHotLead } from "./notify";
 import { contactsFromWebsites } from "./website";
+import { fallbackPhoto, storePhoto } from "./photos";
 import { companyFromHeadline, predictWorkEmail, type Prediction } from "./email-finder";
 
 export const PostIn = z.object({
@@ -19,6 +20,7 @@ export const PostIn = z.object({
   headline: z.string().max(1000).nullish(),
   text: z.string().min(20).max(20000),
   postedAt: z.string().max(100).nullish(),
+  authorPhoto: z.string().url().max(2000).nullish(),
 });
 export type PostIn = z.infer<typeof PostIn>;
 
@@ -174,11 +176,15 @@ export async function ingestPosts(posts: PostIn[], opts: { force?: boolean; capt
               email_alternatives: guess ? guess.alternatives.join(", ") : "",
               emails: emails.join(", "),
               phones: phones.join(", "),
+              photo_url: p.authorPhoto ? await storePhoto(p.authorPhoto, authorUrl) : null,
               captured_by: opts.capturedBy ?? null,
               updated_at: new Date().toISOString(),
             },
             { onConflict: "url", ignoreDuplicates: true },
           );
+      } else if (profile && !profile.photo_url && p.authorPhoto && authorUrl) {
+        const stored = await storePhoto(p.authorPhoto, authorUrl);
+        if (stored) await sb().from("profiles").update({ photo_url: stored }).eq("url", authorUrl);
       }
       if (rows[0].score >= alertScore) hot.push(rows[0]);
     }
@@ -225,6 +231,11 @@ export async function saveProfile(p: ProfileIn, capturedBy?: string | null) {
     if (siteEmails.length || sitePhones.length) note ??= "From their website";
   }
 
+  // Their photo: our own lasting copy of the one LinkedIn showed, else GitHub or Gravatar.
+  let photo = old?.photo_url ?? null;
+  if (p.photo) photo = (await storePhoto(p.photo, url)) ?? photo;
+  if (!photo) photo = await fallbackPhoto(url, old?.github_url ?? null, [...new Set([...(old?.emails ? old.emails.split(", ") : []), ...emails])]);
+
   // Predict their work email from their company (our own Apollo style finder).
   const company = p.company ?? old?.company ?? companyFromHeadline(p.headline ?? old?.headline);
   const known = [...new Set([...(old?.emails ? old.emails.split(", ") : []), ...emails, ...siteEmails])];
@@ -241,7 +252,7 @@ export async function saveProfile(p: ProfileIn, capturedBy?: string | null) {
         headline: p.headline ?? old?.headline ?? null,
         company: company ?? null,
         location: p.location ?? old?.location ?? null,
-        photo_url: p.photo ?? old?.photo_url ?? null,
+        photo_url: photo,
         company_domain: guess?.domain ?? old?.company_domain ?? null,
         work_email: guess?.email ?? old?.work_email ?? null,
         work_email_status: guess?.status ?? old?.work_email_status ?? null,

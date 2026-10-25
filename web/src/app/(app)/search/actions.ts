@@ -6,6 +6,7 @@ import { logActivity } from "@/lib/activity";
 import { cleanProfileUrl, ingestPosts, saveProfile } from "@/lib/ingest";
 import { requireMember } from "@/lib/session";
 import { sb } from "@/lib/db";
+import { storePhoto } from "@/lib/photos";
 
 const Hit = z.object({
   title: z.string().max(500),
@@ -42,7 +43,8 @@ export async function saveHitAsLead(formData: FormData) {
   // A saved LinkedIn person also gets their photo in People.
   const profileUrl = cleanProfileUrl(h.link);
   if (h.photo && profileUrl && /linkedin\.com\/in\//.test(profileUrl)) {
-    await sb().from("profiles").update({ photo_url: h.photo }).eq("url", profileUrl).is("photo_url", null);
+    const stored = await storePhoto(h.photo, profileUrl);
+    if (stored) await sb().from("profiles").update({ photo_url: stored }).eq("url", profileUrl).is("photo_url", null);
   }
   await logActivity(me, "add_post", { detail: `From search: ${h.link}` });
   back(h.back, res.added ? "Saved as a lead." : "That one is already a lead.");
