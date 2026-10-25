@@ -11,7 +11,8 @@ export async function GET(req: Request) {
   if (denied) return denied;
   // The team's searches plus this member's own, so each person's extension also checks what they care about.
   const me = await apiMember(req);
-  const mine = (s: string | undefined) => lines(s ?? "");
+  // A member's own phrases count only while their automatic features are on.
+  const mine = (s: string | undefined) => (me && !me.auto_access ? [] : lines(s ?? ""));
   const phrases = [...new Set([...(await getLines("searches")), ...mine(me?.searches)])];
   const watched = [...new Set([...(await getLines("watched_profiles")), ...mine(me?.watched_profiles)])];
   const searches = phrases.map(linkedinSearchUrl);

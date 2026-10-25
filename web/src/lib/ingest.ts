@@ -70,7 +70,7 @@ export async function ingestPosts(posts: PostIn[], opts: { force?: boolean; capt
   const settings = await getSettings();
   // The team's search phrases plus the capturing member's own.
   const memberSearches = opts.capturedBy
-    ? ((await sb().from("members").select("searches").eq("id", opts.capturedBy).maybeSingle()).data?.searches ?? "")
+    ? ((await sb().from("members").select("searches").eq("id", opts.capturedBy).eq("auto_access", true).maybeSingle()).data?.searches ?? "")
     : "";
   const phrases = [...new Set([...lines(settings.searches), ...lines(memberSearches)])];
   const minScore = Number(settings.min_score) || 0;

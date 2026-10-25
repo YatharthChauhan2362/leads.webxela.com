@@ -37,9 +37,14 @@ export default async function MyWork({ searchParams }: { searchParams: Promise<R
         title={me ? `Hi ${(me.name || me.email).split(/[ @]/)[0]}` : "My work"}
         description={me ? `${JOB_WORDS[me.job] ?? "Team member"}. Here is what needs you today.` : "Sign in is not switched on, so there is no personal list yet."}
         actions={
-          <Link href="/?who=me" className={buttonClass("secondary")}>
-            All my leads
-          </Link>
+          <>
+            <Link href="/leads/new" className={buttonClass("primary")}>
+              New lead
+            </Link>
+            <Link href="/?who=me" className={buttonClass("secondary")}>
+              All my leads
+            </Link>
+          </>
         }
       />
 

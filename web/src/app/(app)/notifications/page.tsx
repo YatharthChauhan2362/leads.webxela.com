@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { markAllRead } from "./actions";
+import { deleteNotifications } from "@/app/actions";
 import { timeAgo } from "@/components/shell/app-shell";
 import { Badge, Card, CardEmpty, PageHeader } from "@/components/ui/layout";
 import { SubmitButton } from "@/components/ui/submit-button";
@@ -34,9 +35,17 @@ export default async function NotificationsPage() {
         title="Notifications"
         description="Hot leads, leads given to you and follow ups. Your extension also shows these as desktop alerts within a minute."
         actions={
-          <form action={markAllRead}>
-            <SubmitButton pendingText="Marking...">Mark all as read</SubmitButton>
-          </form>
+          <>
+            <form action={markAllRead}>
+              <SubmitButton pendingText="Marking...">Mark all as read</SubmitButton>
+            </form>
+            <form action={deleteNotifications}>
+              <input type="hidden" name="back" value="/notifications" />
+              <SubmitButton variant="secondary" pendingText="Clearing..." confirm="Clear all your notifications?">
+                Clear all
+              </SubmitButton>
+            </form>
+          </>
         }
       />
       <Card padded={false}>
@@ -52,7 +61,16 @@ export default async function NotificationsPage() {
                   <p className="mt-1 font-semibold">{n.lead_id ? <Link href={`/leads/${n.lead_id}`} className="hover:text-primary hover:underline">{n.title}</Link> : n.title}</p>
                   {n.body ? <p className="line-clamp-2 text-[14px] text-muted-foreground">{n.body}</p> : null}
                 </div>
-                <span className="text-[13px] whitespace-nowrap text-muted-foreground">{timeAgo(n.created_at)}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[13px] whitespace-nowrap text-muted-foreground">{timeAgo(n.created_at)}</span>
+                  <form action={deleteNotifications}>
+                    <input type="hidden" name="id" value={n.id} />
+                    <input type="hidden" name="back" value="/notifications" />
+                    <SubmitButton variant="ghost" size="sm" pendingText="..." aria-label={`Remove ${n.title}`}>
+                      Remove
+                    </SubmitButton>
+                  </form>
+                </div>
               </li>
             ))}
           </ul>

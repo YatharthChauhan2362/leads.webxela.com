@@ -262,3 +262,17 @@ input[type="file"]::file-selector-button:hover {
 .h-13 { height: 3.25rem; }
 html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+/* Google's search box locks page scrolling (gsc-overflow-hidden) as if its own results window were open.
+   We hide that window, so the lock must never apply. */
+html.gsc-overflow-hidden,
+body.gsc-overflow-hidden,
+.gsc-overflow-hidden {
+  overflow: visible !important;
+  overflow-y: auto !important;
+}
+#gcse-hidden,
+.gsc-results-wrapper-overlay,
+.gsc-modal-background-image {
+  display: none !important;
+}

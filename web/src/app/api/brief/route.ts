@@ -9,7 +9,7 @@ export const OPTIONS = preflight;
 export async function GET(req: Request) {
   const denied = await checkKey(req);
   if (denied) return denied;
-  const [s, members] = await Promise.all([getSettings(), sb().from("members").select("searches, watched_profiles").neq("status", "disabled").then((r) => must(r) as { searches: string; watched_profiles: string }[])]);
+  const [s, members] = await Promise.all([getSettings(), sb().from("members").select("searches, watched_profiles").neq("status", "disabled").eq("auto_access", true).then((r) => must(r) as { searches: string; watched_profiles: string }[])]);
   const phrases = [...new Set([...lines(s.searches), ...members.flatMap((m) => lines(m.searches))])];
   const watched = [...new Set([...lines(s.watched_profiles), ...members.flatMap((m) => lines(m.watched_profiles))])];
   return NextResponse.json(

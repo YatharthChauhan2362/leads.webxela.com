@@ -1,4 +1,4 @@
-import { createTeam, deleteTeam, invite, newKey, removeMember, renameTeam, setAccess, updateMember } from "./actions";
+import { createTeam, deleteTeam, invite, newKey, removeMember, renameTeam, setAccess, setAutoAccess, updateMember } from "./actions";
 import Link from "next/link";
 import { JOB_WORDS } from "@/components/leads";
 import { PROVIDER_WORDS, ProviderLogo } from "@/components/provider-logo";
@@ -150,6 +150,7 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
             <Th>Role and team</Th>
             <Th>Access</Th>
             <Th>Leads</Th>
+            <Th>Automatic features</Th>
             {admin ? <Th>Actions</Th> : null}
           </tr>
         </THead>
@@ -249,6 +250,19 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
                   ) : null}
                 </Td>
                 <Td className="align-top">{leadCount.get(m.id) ?? 0}</Td>
+                <Td className="min-w-[200px] align-top">
+                  <Badge tone={m.auto_access ? "green" : "neutral"}>{m.auto_access ? "On" : "Off"}</Badge>
+                  <p className="mt-1 text-[12.5px] text-muted-foreground">Extension timer, their searches in the Claude routine, AI drafts.</p>
+                  {!locked ? (
+                    <form action={setAutoAccess} className="mt-1">
+                      <input type="hidden" name="id" value={m.id} />
+                      <input type="hidden" name="on" value={m.auto_access ? "0" : "1"} />
+                      <SubmitButton variant="secondary" size="sm" pendingText="Saving...">
+                        {m.auto_access ? "Turn off" : "Turn on"}
+                      </SubmitButton>
+                    </form>
+                  ) : null}
+                </Td>
                 {admin ? (
                   <Td className="align-top">
                     {!self && !locked ? (

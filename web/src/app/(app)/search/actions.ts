@@ -5,8 +5,15 @@ import { z } from "zod";
 import { logActivity } from "@/lib/activity";
 import { cleanProfileUrl, ingestPosts, saveProfile } from "@/lib/ingest";
 import { requireMember } from "@/lib/session";
+import { sb } from "@/lib/db";
 
-const Hit = z.object({ title: z.string().max(500), link: z.string().url().max(1000), snippet: z.string().max(2000), back: z.string().max(500) });
+const Hit = z.object({
+  title: z.string().max(500),
+  link: z.string().url().max(1000),
+  snippet: z.string().max(2000),
+  photo: z.union([z.literal(""), z.string().url().max(2000)]).optional(),
+  back: z.string().max(500),
+});
 
 function back(path: string, msg: string, kind: "ok" | "error" = "ok"): never {
   const url = new URL(path.startsWith("/") && !path.startsWith("//") ? path : "/search", "http://x");
@@ -32,6 +39,11 @@ export async function saveHitAsLead(formData: FormData) {
     ],
     { force: true, capturedBy: me?.id },
   );
+  // A saved LinkedIn person also gets their photo in People.
+  const profileUrl = cleanProfileUrl(h.link);
+  if (h.photo && profileUrl && /linkedin\.com\/in\//.test(profileUrl)) {
+    await sb().from("profiles").update({ photo_url: h.photo }).eq("url", profileUrl).is("photo_url", null);
+  }
   await logActivity(me, "add_post", { detail: `From search: ${h.link}` });
   back(h.back, res.added ? "Saved as a lead." : "That one is already a lead.");
 }

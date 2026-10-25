@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
-import { assignLead, deleteLead, draftReply, handToBde, saveNotes, setFollowUp, setStatus } from "@/app/actions";
+import { assignLead, deleteLeads, draftReply, handToBde, saveNotes, setFollowUp, setStatus, updateLead } from "@/app/actions";
+import { Field, FormGrid, Input } from "@/components/ui/form";
 import { requireLeadAccess, seesAll } from "@/lib/access";
 import { currentMember } from "@/lib/session";
 import { ContactCell, SOURCES, STATUS_WORDS, ScoreBadge, list } from "@/components/leads";
@@ -70,6 +71,40 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
                 {lead.reply ? "Write again" : "Draft a reply"}
               </SubmitButton>
             </form>
+          </Card>
+
+          <Card>
+            <details>
+              <summary className="min-h-[32px] text-[17px] font-semibold">Edit details</summary>
+              <form action={updateLead} className="mt-4 space-y-4">
+                <input type="hidden" name="id" value={lead.id} />
+                <input type="hidden" name="back" value={back} />
+                <FormGrid cols={2}>
+                  <Field label="Name" htmlFor="e-author">
+                    <Input id="e-author" name="author" defaultValue={lead.author ?? ""} required maxLength={200} />
+                  </Field>
+                  <Field label="Company and role" htmlFor="e-headline" optional>
+                    <Input id="e-headline" name="headline" defaultValue={lead.headline ?? ""} maxLength={300} />
+                  </Field>
+                  <Field label="Email" htmlFor="e-emails" optional hint="Separate several with commas.">
+                    <Input id="e-emails" name="emails" defaultValue={lead.emails} maxLength={500} />
+                  </Field>
+                  <Field label="Phone" htmlFor="e-phones" optional>
+                    <Input id="e-phones" name="phones" defaultValue={lead.phones} maxLength={200} />
+                  </Field>
+                  <Field label="LinkedIn profile" htmlFor="e-author-url" optional>
+                    <Input id="e-author-url" name="author_url" type="url" defaultValue={lead.author_url ?? ""} maxLength={1000} />
+                  </Field>
+                  <Field label="Link to the post" htmlFor="e-post-url" optional>
+                    <Input id="e-post-url" name="post_url" type="url" defaultValue={lead.post_url ?? ""} maxLength={1000} />
+                  </Field>
+                </FormGrid>
+                <Field label="What they need" htmlFor="e-text">
+                  <Textarea id="e-text" name="text" defaultValue={lead.text} required className="min-h-32" />
+                </Field>
+                <SubmitButton pendingText="Saving...">Save details</SubmitButton>
+              </form>
+            </details>
           </Card>
 
           <Card>
@@ -189,9 +224,9 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
               </select>
               <SubmitButton pendingText="Saving...">Save</SubmitButton>
             </form>
-            {all ? (
-            <form action={deleteLead} className="mt-4 border-t border-border pt-4">
-              <input type="hidden" name="id" value={lead.id} />
+            {all || lead.captured_by === me?.id ? (
+            <form action={deleteLeads} className="mt-4 border-t border-border pt-4">
+              <input type="hidden" name="ids" value={lead.id} />
               <input type="hidden" name="back" value="/" />
               <SubmitButton variant="danger" pendingText="Removing..." confirm="Remove this lead for good?">
                 Remove lead

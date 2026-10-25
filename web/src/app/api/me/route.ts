@@ -17,7 +17,7 @@ export async function GET(req: Request) {
       member: me ? { name: me.name || me.email.split("@")[0], email: me.email, role: me.role, job: me.job } : null,
       brand: { first: b.first, second: b.second, color: b.color, logo },
       // Set by admins on Preferences. The extension follows these and members cannot change them.
-      schedule: { minutes: Number(s.ext_minutes) || 30, dailyCap: Number(s.ext_daily_cap) || 80 },
+      schedule: { minutes: Number(s.ext_minutes) || 30, dailyCap: Number(s.ext_daily_cap) || 80, allowed: me ? me.auto_access : true },
     },
     { headers: CORS },
   );

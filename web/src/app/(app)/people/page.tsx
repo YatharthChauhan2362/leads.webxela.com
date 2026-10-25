@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { deletePeople } from "@/app/actions";
 import { list } from "@/components/leads";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { splitEmails } from "@/lib/github";
 import { timeAgo } from "@/components/shell/app-shell";
 import { buttonClass } from "@/components/ui/button";
@@ -77,9 +79,20 @@ export default async function PeoplePage({ searchParams }: { searchParams: Promi
       {people.length === 0 ? (
         <EmptyState title="No people yet" description="Open any LinkedIn profile with the extension on. It is saved here by itself." />
       ) : (
+        <>
+        <form id="bulk-people" action={deletePeople} className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <input type="hidden" name="back" value="/people" />
+          <p className="text-sm text-muted-foreground">Tick people to delete them together. Their leads stay.</p>
+          <SubmitButton variant="danger" size="sm" pendingText="Deleting..." confirm="Delete the ticked people for good?">
+            Delete selected
+          </SubmitButton>
+        </form>
         <Table>
           <THead>
             <tr>
+              <Th className="w-10">
+                <span className="sr-only">Select</span>
+              </Th>
               <Th>Person</Th>
               <Th>Company</Th>
               <Th>Location</Th>
@@ -97,6 +110,12 @@ export default async function PeoplePage({ searchParams }: { searchParams: Promi
               const showWork = p.work_email && !work.includes(p.work_email);
               return (
                 <Tr key={p.url}>
+                  <Td className="align-top">
+                    <label className="flex size-11 items-center justify-center">
+                      <span className="sr-only">Select {p.name}</span>
+                      <input type="checkbox" name="urls" value={p.url} form="bulk-people" className="size-5 accent-primary" />
+                    </label>
+                  </Td>
                   <Td className="min-w-[240px] align-top">
                     <div className="flex items-start gap-3">
                       {p.photo_url ? (
@@ -157,14 +176,18 @@ export default async function PeoplePage({ searchParams }: { searchParams: Promi
                     )}
                   </Td>
                   <Td className="align-top text-[14px] whitespace-nowrap">
-                    <a href={p.url} target="_blank" rel="noreferrer" className="block font-medium text-primary hover:underline">
-                      LinkedIn
-                    </a>
-                    {p.github_url ? (
-                      <a href={p.github_url} target="_blank" rel="noreferrer" className="block font-medium text-primary hover:underline">
-                        GitHub
+                    <div className="flex items-center gap-2">
+                      <a href={p.url} target="_blank" rel="noreferrer" aria-label={`${p.name ?? "This person"} on LinkedIn`} className="inline-flex size-11 items-center justify-center">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src="/logos/linkedin.svg" alt="LinkedIn" width={24} height={24} />
                       </a>
-                    ) : null}
+                      {p.github_url ? (
+                        <a href={p.github_url} target="_blank" rel="noreferrer" aria-label={`${p.name ?? "This person"} on GitHub`} className="inline-flex size-11 items-center justify-center">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src="/logos/github.svg" alt="GitHub" width={22} height={22} />
+                        </a>
+                      ) : null}
+                    </div>
                     {list(p.websites)[0] ? (
                       <a href={list(p.websites)[0]} target="_blank" rel="noreferrer" className="block font-medium text-primary hover:underline">
                         Website
@@ -186,6 +209,7 @@ export default async function PeoplePage({ searchParams }: { searchParams: Promi
             })}
           </tbody>
         </Table>
+        </>
       )}
     </>
   );

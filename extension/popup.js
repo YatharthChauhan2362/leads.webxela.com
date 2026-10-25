@@ -172,7 +172,12 @@ async function start() {
   $("capture").checked = s.capture;
   $("watch").checked = s.watch;
   renderGeneral(s);
-  $("schedule").textContent = `Set by your admin: every ${s.every} minutes, up to ${s.dailyCap} LinkedIn pages a day.`;
+  const allowed = (await new Promise((r) => chrome.storage.local.get({ autoAllowed: true }, r))).autoAllowed;
+  $("schedule").textContent = allowed
+    ? `Set by your admin: every ${s.every} minutes, up to ${s.dailyCap} LinkedIn pages a day.`
+    : "Timed checks are turned off by your admin. Posts you scroll past are still saved.";
+  $("watch").disabled = !allowed;
+  $("watchNow").disabled = !allowed;
 
   // Step 1: are we connected to the app with a valid key?
   const me = await ask({ type: "me" });

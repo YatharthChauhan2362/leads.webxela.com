@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { checkNow, setStatus } from "@/app/actions";
+import { checkNow, deleteLeads, setStatus } from "@/app/actions";
 import { ContactCell, SOURCES, STATUS_WORDS, ScoreBadge } from "@/components/leads";
 import { timeAgo } from "@/components/shell/app-shell";
 import { buttonClass } from "@/components/ui/button";
@@ -109,9 +109,14 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<SP
         description="Opportunities: people who posted a need that matches your searches. Each one has a score, an owner, a status and a follow up date. Contact details for each person live in People."
         actions={
           <>
+            <Link href="/leads/new" className={buttonClass("primary")}>
+              New lead
+            </Link>
             <form action={checkNow}>
               <input type="hidden" name="back" value={backTo} />
-              <SubmitButton pendingText="Checking...">Check now</SubmitButton>
+              <SubmitButton variant="secondary" pendingText="Checking...">
+                Check now
+              </SubmitButton>
             </form>
             {all ? (
               <a href="/api/export" className={buttonClass("secondary")}>
@@ -196,12 +201,22 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<SP
         />
       ) : (
         <>
-          <p className="mb-2 text-sm text-muted-foreground">
-            Showing {leads.length} lead{leads.length === 1 ? "" : "s"}
-          </p>
+          {/* The checkboxes in the table belong to this form, so ticked leads can be deleted together. */}
+          <form id="bulk" action={deleteLeads} className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <input type="hidden" name="back" value={backTo} />
+            <p className="text-sm text-muted-foreground">
+              Showing {leads.length} lead{leads.length === 1 ? "" : "s"}. Tick leads to delete them together.
+            </p>
+            <SubmitButton variant="danger" size="sm" pendingText="Deleting..." confirm="Delete the ticked leads for good?">
+              Delete selected
+            </SubmitButton>
+          </form>
           <Table>
             <THead>
               <tr>
+                <Th className="w-10">
+                  <span className="sr-only">Select</span>
+                </Th>
                 <Th>Score</Th>
                 <Th>Person</Th>
                 <Th>What they need</Th>
@@ -214,6 +229,12 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<SP
             <tbody>
               {leads.map((l) => (
                 <Tr key={l.id}>
+                  <Td className="align-top">
+                    <label className="flex size-11 items-center justify-center">
+                      <span className="sr-only">Select {l.author}</span>
+                      <input type="checkbox" name="ids" value={l.id} form="bulk" className="size-5 accent-primary" />
+                    </label>
+                  </Td>
                   <Td className="align-top">
                     <div className="flex flex-col items-start gap-1">
                       <ScoreBadge score={l.score} />

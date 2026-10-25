@@ -1,6 +1,17 @@
 import { Badge } from "@/components/ui/layout";
 
-export const SOURCES: Record<string, string> = { linkedin: "LinkedIn", reddit: "Reddit", hackernews: "Hacker News", manual: "Added by hand" };
+export const SOURCES: Record<string, string> = {
+  linkedin: "LinkedIn",
+  reddit: "Reddit",
+  hackernews: "Hacker News",
+  manual: "Added by hand",
+  referral: "Referral",
+  email: "Email",
+  call: "Phone call",
+  event: "Event",
+  website: "Our website",
+  other: "Other",
+};
 
 export const JOB_WORDS: Record<string, string> = { lead_generator: "Lead generator", bde: "BDE (sales)", manager: "Manager", other: "Other" };
 

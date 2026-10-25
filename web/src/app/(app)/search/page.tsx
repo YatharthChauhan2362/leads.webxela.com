@@ -4,7 +4,7 @@ import { Flash } from "@/components/ui/flash";
 import { Input } from "@/components/ui/form";
 import { Callout, EmptyState, PageHeader } from "@/components/ui/layout";
 import { logActivity } from "@/lib/activity";
-import { must, sb } from "@/lib/db";
+import { getSettings, lines, must, sb } from "@/lib/db";
 import { currentMember } from "@/lib/session";
 import { COUNTRIES } from "@/lib/places";
 import { Field, Select } from "@/components/ui/form";
@@ -33,6 +33,8 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   const count = [10, 20, 50, 100].includes(Number(sp.count)) ? Number(sp.count) : 20;
   const confirmed = sp.confirmed === "1";
   const newest = sp.newest === "1";
+  // Show only results not seen before. On by default; "all=1" shows everything again.
+  const showAll = sp.all === "1";
   const t = TYPES.find((x) => x.key === type)!;
   const me = await currentMember();
   // Engines are added on the Search engines page. Only the engine ID is needed, no API key.
@@ -40,7 +42,14 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   const cx = engines.find((e) => e.kind === type)?.cx ?? null;
   const have = new Set(engines.map((e) => e.kind));
 
-  const params = new URLSearchParams(Object.entries({ type, q, country, city, role, company, exclude, count: String(count), confirmed: confirmed ? "1" : "", newest: newest ? "1" : "" }).filter(([, v]) => v));
+  const params = new URLSearchParams(Object.entries({ type, q, country, city, role, company, exclude, count: String(count), confirmed: confirmed ? "1" : "", newest: newest ? "1" : "", all: showAll ? "1" : "" }).filter(([, v]) => v));
+  // Everyone and every post we already have, so search never shows them again.
+  const [savedLeads, savedPeople, s] = await Promise.all([
+    sb().from("leads").select("post_url, author_url").limit(20000).then((r) => must(r) as { post_url: string | null; author_url: string | null }[]),
+    sb().from("profiles").select("url").limit(20000).then((r) => must(r) as { url: string }[]),
+    getSettings(),
+  ]);
+  const known = [...new Set([...savedLeads.flatMap((l) => [l.post_url, l.author_url]), ...savedPeople.map((p) => p.url)].filter((x): x is string => Boolean(x)))];
   const back = `/search?${params}`;
   if (q && cx) await logActivity(me, "lookup", { detail: `Searched ${t.label}: ${q}${country ? `, ${COUNTRIES[country].name}` : ""}${city ? `, ${city}` : ""}` });
 
@@ -83,7 +92,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
           <Input id="q" name="q" defaultValue={q} placeholder={`For example: ${t.example}`} />
           <button className={buttonClass("primary", "md", "h-12 sm:w-40")}>Search</button>
         </div>
-        <details className="rounded-2xl border border-border bg-background p-4" open={Boolean(country || city || role || company || exclude || confirmed || newest || count !== 20)}>
+        <details className="rounded-2xl border border-border bg-background p-4" open>
           <summary className="min-h-[32px] text-[15px] font-semibold">Filters</summary>
           <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Field label="Country" htmlFor="country">
@@ -131,6 +140,13 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
                   <span className="block text-[13px] text-muted-foreground">Keep only results whose name, title or summary mentions the country or city. Fewer results, but they really are there.</span>
                 </span>
               </label>
+              <label className="flex items-start gap-3">
+                <input type="checkbox" name="all" value="1" defaultChecked={showAll} className="mt-0.5 size-5 accent-primary" />
+                <span>
+                  <span className="block text-[15px] font-medium">Show results I have already seen or saved</span>
+                  <span className="block text-[13px] text-muted-foreground">Off by default, so the same search keeps finding new people.</span>
+                </span>
+              </label>
               {type === "posts" ? (
                 <label className="flex items-start gap-3">
                   <input type="checkbox" name="newest" value="1" defaultChecked={newest} className="mt-0.5 size-5 accent-primary" />
@@ -150,7 +166,21 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
       ) : !q ? (
         <EmptyState title={`Search ${t.label.toLowerCase()}`} description={`Type what you are looking for, for example: ${t.example}`} />
       ) : (
-        <GoogleBox key={`${cx}:${fullQuery}:${count}:${confirmed}`} cx={cx} q={fullQuery} back={back} kind={type} count={count} confirmTerms={confirmTerms} confirmedOnly={confirmed} newest={newest} />
+        <GoogleBox
+          key={`${cx}:${fullQuery}:${count}:${confirmed}:${showAll}`}
+          cx={cx}
+          q={fullQuery}
+          back={back}
+          kind={type}
+          count={count}
+          confirmTerms={confirmTerms}
+          confirmedOnly={confirmed}
+          newest={newest}
+          known={showAll ? [] : known}
+          onlyNew={!showAll}
+          services={lines(s.pref_services)}
+          places={lines(s.pref_locations)}
+        />
       )}
     </>
   );

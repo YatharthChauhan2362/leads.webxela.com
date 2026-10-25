@@ -93,7 +93,12 @@ async function refreshMe() {
     const r = await api("/api/me");
     await set({ me: r.member, brand: r.brand, connected: true, connectError: "" });
     // The admin's schedule from Preferences. Members cannot change it here.
-    if (r.schedule) {
+    // An admin can switch timed checks off for this person.
+    if (r.schedule && r.schedule.allowed === false) {
+      await chrome.alarms.clear("watch");
+      await set({ autoAllowed: false });
+    } else if (r.schedule) {
+      await set({ autoAllowed: true });
       const s = await get(DEFAULTS);
       if (s.every !== r.schedule.minutes || s.dailyCap !== r.schedule.dailyCap) {
         await set({ every: r.schedule.minutes, dailyCap: r.schedule.dailyCap });
@@ -209,6 +214,7 @@ let watching = false;
 // Opens a few saved searches in one background tab, at a human pace, then closes it.
 async function runWatch(manual) {
   if (watching) return { error: "Already running." };
+  if ((await get({ autoAllowed: true })).autoAllowed === false) return { error: "Timed checks are turned off by your admin." };
   watching = true;
   let tab;
   const result = { pages: 0, posts: 0, added: 0 };

@@ -254,6 +254,7 @@ export type Database = {
       members: {
         Row: {
           api_key: string | null
+          auto_access: boolean
           avatar_url: string | null
           created_at: string
           email: string
@@ -273,6 +274,7 @@ export type Database = {
         }
         Insert: {
           api_key?: string | null
+          auto_access?: boolean
           avatar_url?: string | null
           created_at?: string
           email: string
@@ -292,6 +294,7 @@ export type Database = {
         }
         Update: {
           api_key?: string | null
+          auto_access?: boolean
           avatar_url?: string | null
           created_at?: string
           email?: string

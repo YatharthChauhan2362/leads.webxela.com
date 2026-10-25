@@ -7,6 +7,8 @@ import { must, sb, setSettings, type Lead } from "@/lib/db";
 import { aiEnabled, aiText } from "@/lib/ai";
 import { scorePost } from "@/lib/score";
 import { requireLeadAccess, seesAll } from "@/lib/access";
+import { extractEmails } from "@/lib/contacts";
+import { cleanProfileUrl, ingestPosts } from "@/lib/ingest";
 import { requireMember } from "@/lib/session";
 import { logActivity } from "@/lib/activity";
 import { whiteContrast } from "@/lib/brand";
@@ -69,7 +71,7 @@ export async function draftReply(formData: FormData) {
   if (!lead) back(formData, "That lead is gone.", "error");
   const first = (lead.author ?? "").replace(/^(dr\.?|mr\.?|ms\.?|mrs\.?)\s+/i, "").split(/\s+/)[0] || "there";
   let reply: string;
-  if (aiEnabled()) {
+  if (aiEnabled() && (!me || me.auto_access)) {
     try {
       reply = await aiText(
         `You write short first replies from Yatri Cloud, a team that builds websites, apps, SaaS, AI and cloud projects.
@@ -265,4 +267,116 @@ export async function savePreferences(formData: FormData) {
   });
   await logActivity(me, "settings", { detail: "Changed preferences" });
   back(formData, "Preferences saved. They apply to every new post from now on.");
+}
+
+const LeadFields = z.object({
+  author: z.string().trim().min(1, "Add their name.").max(200),
+  author_url: z.union([z.literal(""), z.string().trim().url().max(1000)]),
+  headline: z.string().trim().max(300),
+  emails: z.string().trim().max(500),
+  phones: z.string().trim().max(200),
+  text: z.string().trim().min(5, "Write what they need.").max(5000),
+  post_url: z.union([z.literal(""), z.string().trim().url().max(1000)]),
+  source: z.enum(["manual", "linkedin", "referral", "email", "call", "event", "website", "other"]).default("manual"),
+});
+
+const listOf = (v: string) =>
+  v
+    .split(/[,\n;]+/)
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .join(", ");
+
+/** A lead you add by hand: from a call, an email, a referral or anywhere else. */
+export async function createLead(formData: FormData) {
+  const me = await requireMember();
+  const r = LeadFields.safeParse(Object.fromEntries(formData));
+  if (!r.success) back(formData, r.error.issues[0]?.message ?? "Check the form.", "error");
+  const d = r.data;
+  const res = await ingestPosts(
+    [
+      {
+        source: d.source,
+        postId: `manual:${Date.now()}:${d.author}`,
+        postUrl: d.post_url || null,
+        author: d.author,
+        authorUrl: d.author_url || null,
+        headline: d.headline || null,
+        text: d.text.padEnd(20, "."),
+      },
+    ],
+    { force: true, capturedBy: me?.id },
+  );
+  const lead = must(await sb().from("leads").select("id").eq("author", d.author).order("captured_at", { ascending: false }).limit(1).maybeSingle()) as { id: number } | null;
+  if (lead) {
+    // Contact details typed in by hand are known for sure.
+    must(await sb().from("leads").update({ emails: listOf(d.emails), phones: listOf(d.phones), contact_note: d.emails || d.phones ? "Added by hand" : null }).eq("id", lead.id));
+    if (me) await assignTo(lead.id, me.id);
+  }
+  await logActivity(me, "add_post", { detail: `Added a lead by hand: ${d.author}` });
+  if (!res.added || !lead) back(formData, "Could not add the lead.", "error");
+  redirect(`/leads/${lead.id}?ok=${encodeURIComponent("Lead added and given to you.")}`);
+}
+
+/** Edit a lead's details. */
+export async function updateLead(formData: FormData) {
+  const me = await requireMember();
+  const id = Id.parse(formData.get("id"));
+  await requireLeadAccess(me, id);
+  const r = LeadFields.omit({ source: true }).safeParse(Object.fromEntries(formData));
+  if (!r.success) back(formData, r.error.issues[0]?.message ?? "Check the form.", "error");
+  const d = r.data;
+  const emails = listOf(d.emails);
+  if (emails && extractEmails(emails).length !== emails.split(", ").length) back(formData, "One of the emails does not look right.", "error");
+  must(
+    await sb()
+      .from("leads")
+      .update({
+        author: d.author,
+        author_url: d.author_url ? (cleanProfileUrl(d.author_url) ?? d.author_url) : null,
+        headline: d.headline || null,
+        emails,
+        phones: listOf(d.phones),
+        text: d.text,
+        post_url: d.post_url || null,
+      })
+      .eq("id", id),
+  );
+  await logActivity(me, "notes", { target: `lead ${id}`, detail: "Edited lead details" });
+  back(formData, "Lead updated.");
+}
+
+/** Delete several leads. Admins delete any; members only the ones they captured. */
+export async function deleteLeads(formData: FormData) {
+  const me = await requireMember();
+  const ids = formData.getAll("ids").map((v) => Id.parse(v));
+  if (!ids.length) back(formData, "Tick the leads to delete first.", "error");
+  let q = sb().from("leads").delete().in("id", ids);
+  if (!seesAll(me) && me) q = q.eq("captured_by", me.id);
+  const gone = must(await q.select("id")) as { id: number }[];
+  await logActivity(me, "delete_lead", { detail: `Deleted ${gone.length} lead${gone.length === 1 ? "" : "s"}` });
+  back(formData, gone.length === ids.length ? `Deleted ${gone.length}.` : `Deleted ${gone.length}. The others were not yours to delete.`);
+}
+
+/** Delete people from People. Their leads stay. */
+export async function deletePeople(formData: FormData) {
+  const me = await requireMember();
+  const urls = formData.getAll("urls").map((v) => z.string().url().max(1000).parse(v));
+  if (!urls.length) back(formData, "Tick the people to delete first.", "error");
+  let q = sb().from("profiles").delete().in("url", urls);
+  if (!seesAll(me) && me) q = q.eq("captured_by", me.id);
+  const gone = must(await q.select("url")) as { url: string }[];
+  await logActivity(me, "delete_lead", { detail: `Deleted ${gone.length} ${gone.length === 1 ? "person" : "people"} from People` });
+  back(formData, gone.length === urls.length ? `Deleted ${gone.length}.` : `Deleted ${gone.length}. The others were not yours to delete.`);
+}
+
+/** Clear your notifications: one, or all of them. */
+export async function deleteNotifications(formData: FormData) {
+  const me = await requireMember();
+  if (!me) back(formData, "Sign in first.", "error");
+  const id = formData.get("id");
+  let q = sb().from("notifications").delete().eq("member_id", me.id);
+  if (id) q = q.eq("id", Id.parse(id));
+  must(await q);
+  back(formData, id ? "Removed." : "All cleared.");
 }
