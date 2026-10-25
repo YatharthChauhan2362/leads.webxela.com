@@ -1,7 +1,7 @@
 // Sends posts to the Yatri Leads server, and runs watch mode on a timer.
 
 const DEFAULTS = {
-  server: "http://localhost:3000",
+  server: "https://leads-webxela-com.vercel.app",
   apiKey: "",
   capture: true,
   watch: true,
