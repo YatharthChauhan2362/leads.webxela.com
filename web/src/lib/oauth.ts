@@ -58,8 +58,9 @@ export async function exchangeCode(p: Provider, code: string, zohoServer?: strin
     if (!info.email || info.email_verified === false) throw new Error("Google did not share a verified email.");
     return { email: String(info.email).toLowerCase(), name: info.name ?? null, avatar: info.picture ?? null };
   }
-  // Zoho sends people to their own data centre (.com, .eu, .in). Use the one it reports, if it is a real Zoho host.
-  const base = zohoServer && /^https:\/\/accounts\.zoho\.[a-z.]{2,8}$/.test(zohoServer) ? zohoServer : ZOHO;
+  // Only Zoho India (accounts.zoho.in, or ZOHO_ACCOUNTS_URL) for now. Accounts from other Zoho regions are not used.
+  void zohoServer;
+  const base = ZOHO;
   const tok = await post(`${base}/oauth/v2/token`, {
     code,
     client_id: process.env.ZOHO_CLIENT_ID!,
