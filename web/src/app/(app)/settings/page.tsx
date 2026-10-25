@@ -13,6 +13,7 @@ import { linkedinSearchUrl } from "@/lib/linkedin";
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await requireMember("admin");
   const email = emailEnabled();
+  const searchOn = await searchEnabled();
   const settings = await getSettings();
   return (
     <>
@@ -23,10 +24,10 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         <Callout tone={aiEnabled() ? "green" : "amber"} label={aiEnabled() ? "AI scoring is on" : "AI scoring is off"}>
           {aiEnabled() ? "Each post is read by AI and scored." : "Posts are scored by keywords. Add AI_API_KEY to .env.local for smarter scores."}
         </Callout>
-        <Callout tone={searchEnabled() ? "green" : "amber"} label={searchEnabled() ? "Google search is on" : "Google search is off"}>
-          {searchEnabled()
+        <Callout tone={searchOn ? "green" : "amber"} label={searchOn ? "Google search is on" : "Google search is off"}>
+          {searchOn
             ? `Finds LinkedIn posts every 3 hours and public emails for Find. ${await searchesLeftToday()} free searches left today.`
-            : "Add GOOGLE_CSE_KEY to find LinkedIn posts from the server and search the web for contact details."}
+            : "Add a Google API key and engines on the Search engines page."}
         </Callout>
         <Callout tone={email ? "green" : "amber"} label={email ? "Email alerts are on" : "Email alerts are off"}>
           {email ? `Hot leads are emailed to ${emailTo()} through Zoho.` : "Add the Zoho EMAIL_USER and EMAIL_PASS to .env.local to get hot leads by email."}

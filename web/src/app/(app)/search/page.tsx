@@ -26,6 +26,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   const result = q ? await searchEngine(type, q, page) : null;
   if (q && result?.used) await logActivity(me, "lookup", { detail: `Searched ${t.label}: ${q}` });
   const left = await searchesLeftToday();
+  const ready = await engineReady(type);
   const back = `/search?type=${type}&q=${encodeURIComponent(q)}&page=${page}`;
 
   return (
@@ -47,9 +48,9 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         {t.hint} {left} free searches left today for the whole team.
       </p>
 
-      {!engineReady(type) ? (
+      {!ready ? (
         <Callout tone="amber" label="This search is not set up yet">
-          Ask an admin to add the Google API key and the {t.label} engine ID. Until then this tab cannot search.
+          Ask an admin to add a Google API key and a {t.label} engine on the Search engines page, or all of today&apos;s free searches are used up.
         </Callout>
       ) : !q ? (
         <EmptyState title={`Search ${t.label.toLowerCase()}`} description={`Type what you are looking for, for example: ${t.example}`} />

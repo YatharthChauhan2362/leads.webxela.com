@@ -466,6 +466,81 @@ export type Database = {
         }
         Relationships: []
       }
+      search_engines: {
+        Row: {
+          active: boolean
+          created_at: string
+          cx: string
+          id: string
+          kind: string
+          label: string
+          last_error: string | null
+          used_on: string | null
+          used_today: number
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          cx: string
+          id?: string
+          kind: string
+          label: string
+          last_error?: string | null
+          used_on?: string | null
+          used_today?: number
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          cx?: string
+          id?: string
+          kind?: string
+          label?: string
+          last_error?: string | null
+          used_on?: string | null
+          used_today?: number
+        }
+        Relationships: []
+      }
+      search_keys: {
+        Row: {
+          active: boolean
+          api_key: string
+          created_at: string
+          daily_limit: number
+          exhausted_on: string | null
+          id: string
+          label: string
+          last_error: string | null
+          used_on: string | null
+          used_today: number
+        }
+        Insert: {
+          active?: boolean
+          api_key: string
+          created_at?: string
+          daily_limit?: number
+          exhausted_on?: string | null
+          id?: string
+          label: string
+          last_error?: string | null
+          used_on?: string | null
+          used_today?: number
+        }
+        Update: {
+          active?: boolean
+          api_key?: string
+          created_at?: string
+          daily_limit?: number
+          exhausted_on?: string | null
+          id?: string
+          label?: string
+          last_error?: string | null
+          used_on?: string | null
+          used_today?: number
+        }
+        Relationships: []
+      }
       settings: {
         Row: {
           key: string

@@ -29,6 +29,7 @@ function nav(newCount: number, member: Member | null, unread = 0): NavGroup[] {
         ...(admin ? [{ href: "/linkedin", label: "LinkedIn account" }] : []),
         { href: "/extension", label: "Chrome extension" },
         ...(admin ? [{ href: "/preferences", label: "Preferences" }] : []),
+        ...(admin ? [{ href: "/engines", label: "Search engines" }] : []),
         ...(admin ? [{ href: "/settings", label: "Searches and branding" }] : []),
         ...(admin ? [{ href: "/team", label: "Team" }] : []),
         ...(admin ? [{ href: "/activity", label: "Activity" }] : []),
