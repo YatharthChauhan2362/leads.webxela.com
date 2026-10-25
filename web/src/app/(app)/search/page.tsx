@@ -70,7 +70,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
       ) : !q ? (
         <EmptyState title={`Search ${t.label.toLowerCase()}`} description={`Type what you are looking for, for example: ${t.example}`} />
       ) : (
-        <GoogleBox key={`${cx}:${q}`} cx={cx} q={q} back={back} />
+        <GoogleBox key={`${cx}:${q}`} cx={cx} q={q} back={back} kind={type} />
       )}
     </>
   );

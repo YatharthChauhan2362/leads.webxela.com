@@ -106,7 +106,7 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<SP
     <>
       <PageHeader
         title="Leads"
-        description="Posts that match your searches or score warm, from LinkedIn, Reddit and Hacker News. Hot ones sit at the top. Press a name to see the full post and reply."
+        description="Opportunities: people who posted a need that matches your searches. Each one has a score, an owner, a status and a follow up date. Contact details for each person live in People."
         actions={
           <>
             <form action={checkNow}>

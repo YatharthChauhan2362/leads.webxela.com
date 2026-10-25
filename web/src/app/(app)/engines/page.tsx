@@ -1,11 +1,10 @@
-import { addEngine, addKey, remove, testEngine, toggle } from "./actions";
+import { addEngine, remove, setKind, testEngine, toggle } from "./actions";
 import { Flash } from "@/components/ui/flash";
 import { Field, Input, Select } from "@/components/ui/form";
-import { Badge, Card, CardHeader, PageHeader, Stat } from "@/components/ui/layout";
+import { Badge, Card, CardHeader, PageHeader } from "@/components/ui/layout";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { THead, Table, Td, Th, Tr } from "@/components/ui/table";
 import { must, sb } from "@/lib/db";
-import { searchesLeftToday } from "@/lib/google-search";
 import { requireMember } from "@/lib/session";
 
 const KINDS: Record<string, { word: string; sites: string }> = {
@@ -16,150 +15,90 @@ const KINDS: Record<string, { word: string; sites: string }> = {
   elsewhere: { word: "Other sites", sites: "www.reddit.com/r/forhire/*, www.reddit.com/r/startups/*, news.ycombinator.com/*, x.com/*/status/*, www.indiehackers.com/*" },
 };
 
-type KeyRow = { id: string; label: string; api_key: string; daily_limit: number; used_on: string | null; used_today: number; exhausted_on: string | null; last_error: string | null; active: boolean };
-type EngRow = { id: string; label: string; kind: string; cx: string; active: boolean; used_on: string | null; used_today: number; last_error: string | null };
+type EngRow = { id: string; label: string; kind: string; cx: string; active: boolean; last_error: string | null };
 
 export default async function EnginesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await requireMember("admin");
-  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-  const [keys, engines, left] = await Promise.all([
-    sb().from("search_keys").select("*").order("created_at").then((r) => must(r) as KeyRow[]),
-    sb().from("search_engines").select("*").order("kind").order("created_at").then((r) => must(r) as EngRow[]),
-    searchesLeftToday(),
-  ]);
-  const used = (r: { used_on: string | null; used_today: number }) => (r.used_on === today ? r.used_today : 0);
-  const mask = (k: string) => `${k.slice(0, 6)}...${k.slice(-4)}`;
+  const engines = must(await sb().from("search_engines").select("id, label, kind, cx, active, last_error").order("kind").order("created_at")) as EngRow[];
+  const covered = new Set(engines.filter((e) => e.active).map((e) => e.kind));
 
   return (
     <>
-      <PageHeader
-        title="Search engines"
-        description="Paste each Google search engine's ID and the Search page works straight away. API keys are optional: only add them if you also want the server to search on its own."
-      />
+      <PageHeader title="Search engines" description="Your Google Programmable Search engines. Add each one's name, kind and engine ID, and its tab appears on the Search page." />
       <Flash searchParams={searchParams} />
 
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Searches left today" value={left} note="All working keys together" />
-        <Stat label="API keys" value={keys.filter((k) => k.active).length} note={`${keys.filter((k) => k.exhausted_on === today).length} used up today`} />
-        <Stat label="Engines" value={engines.filter((e) => e.active).length} />
-        <Stat label="Kinds covered" value={`${new Set(engines.filter((e) => e.active).map((e) => e.kind)).size} of 5`} />
+      <div className="mb-6 flex flex-wrap gap-2">
+        {Object.entries(KINDS).map(([k, v]) => (
+          <Badge key={k} tone={covered.has(k) ? "green" : "neutral"}>
+            {v.word}: {covered.has(k) ? "ready" : "not added"}
+          </Badge>
+        ))}
       </div>
 
       <Card className="mb-6">
-        <CardHeader title="How to add an engine" />
-        <ol className="list-decimal space-y-1.5 pl-5 text-[15px]">
-          <li>At programmablesearchengine.google.com, open your engine.</li>
-          <li>On Overview, under Basic, copy the Search engine ID.</li>
-          <li>Add it below with its kind. That is all the Search page needs, no key.</li>
-          <li>Optional: an API key lets the server also search on its own every hour. Without it, the hourly Claude routine and the extension find posts instead.</li>
-        </ol>
+        <CardHeader title="Add an engine" description="Open the engine at programmablesearchengine.google.com, and copy the Search engine ID from Overview, under Basic." />
+        <form action={addEngine} className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_200px_1fr]">
+            <Field label="Name" htmlFor="e-label">
+              <Input id="e-label" name="label" required maxLength={60} placeholder="LinkedIn Posts" />
+            </Field>
+            <Field label="Kind" htmlFor="e-kind">
+              <Select id="e-kind" name="kind" defaultValue="posts">
+                {Object.entries(KINDS).map(([k, v]) => (
+                  <option key={k} value={k}>
+                    {v.word}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Search engine ID" htmlFor="e-cx">
+              <Input id="e-cx" name="cx" required placeholder="667ebfd0a83944a86" autoComplete="off" />
+            </Field>
+          </div>
+          <SubmitButton pendingText="Testing...">Test and add</SubmitButton>
+        </form>
       </Card>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-        <Card>
-          <CardHeader title="Add an API key (optional)" description="Only for automatic server searches. 100 free searches a day each; the next key takes over when one runs out." />
-          <form action={addKey} className="space-y-4">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_1fr_140px]">
-              <Field label="Name" htmlFor="k-label" hint="For example: team@ account">
-                <Input id="k-label" name="label" required maxLength={60} />
-              </Field>
-              <Field label="API key" htmlFor="k-key">
-                <Input id="k-key" name="api_key" required placeholder="AIza..." autoComplete="off" />
-              </Field>
-              <Field label="Per day" htmlFor="k-limit" hint="100 is free.">
-                <Input id="k-limit" name="daily_limit" type="number" min={1} max={10000} defaultValue={100} required />
-              </Field>
-            </div>
-            <SubmitButton pendingText="Testing...">Test and add key</SubmitButton>
-          </form>
-        </Card>
-
-        <Card>
-          <CardHeader title="Add an engine" description="Make it at programmablesearchengine.google.com, add the sites for its kind, then paste its Search engine ID." />
-          <form action={addEngine} className="space-y-4">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_160px_1fr]">
-              <Field label="Name" htmlFor="e-label">
-                <Input id="e-label" name="label" required maxLength={60} placeholder="LinkedIn Post Leads" />
-              </Field>
-              <Field label="Kind" htmlFor="e-kind">
-                <Select id="e-kind" name="kind" defaultValue="posts">
-                  {Object.entries(KINDS).map(([k, v]) => (
-                    <option key={k} value={k}>
-                      {v.word}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <Field label="Search engine ID" htmlFor="e-cx">
-                <Input id="e-cx" name="cx" required placeholder="667ebfd0a83944a86" autoComplete="off" />
-              </Field>
-            </div>
-            <SubmitButton pendingText="Testing...">Test and add engine</SubmitButton>
-          </form>
-        </Card>
-      </div>
-
-      <h2 className="mt-8 mb-3 text-[17px] font-semibold" style={{ fontFamily: "var(--font-sans)", letterSpacing: 0 }}>
-        API keys, used in this order
-      </h2>
-      <Table>
-        <THead>
-          <tr>
-            <Th>Name</Th>
-            <Th>Key</Th>
-            <Th align="right">Used today</Th>
-            <Th>Status</Th>
-            <Th>Actions</Th>
-          </tr>
-        </THead>
-        <tbody>
-          {keys.length === 0 ? (
-            <Tr>
-              <Td className="text-muted-foreground">No keys yet. Add one above.</Td>
-            </Tr>
-          ) : null}
-          {keys.map((k) => (
-            <Tr key={k.id}>
-              <Td className="font-semibold">{k.label}</Td>
-              <Td className="font-mono text-[13px]">{mask(k.api_key)}</Td>
-              <Td align="right">
-                {used(k)} of {k.daily_limit}
-              </Td>
-              <Td className="min-w-[200px]">
-                {!k.active ? <Badge>Paused</Badge> : k.exhausted_on === today || used(k) >= k.daily_limit ? <Badge tone="amber">Used up today</Badge> : k.last_error ? <Badge tone="red">Problem</Badge> : <Badge tone="green">Working</Badge>}
-                {k.last_error ? <p className="mt-1 text-[13px] text-muted-foreground">{k.last_error}</p> : null}
-              </Td>
-              <Td>
-                <Actions table="search_keys" id={k.id} active={k.active} />
-              </Td>
-            </Tr>
-          ))}
-        </tbody>
-      </Table>
-
-      <h2 className="mt-8 mb-3 text-[17px] font-semibold" style={{ fontFamily: "var(--font-sans)", letterSpacing: 0 }}>
-        Engines
-      </h2>
       <Table>
         <THead>
           <tr>
             <Th>Name</Th>
             <Th>Kind</Th>
             <Th>Engine ID</Th>
-            <Th align="right">Used today</Th>
             <Th>Status</Th>
             <Th>Actions</Th>
           </tr>
         </THead>
         <tbody>
+          {engines.length === 0 ? (
+            <Tr>
+              <Td className="text-muted-foreground">No engines yet. Add one above.</Td>
+            </Tr>
+          ) : null}
           {engines.map((e) => (
             <Tr key={e.id}>
               <Td className="font-semibold">{e.label}</Td>
-              <Td>{KINDS[e.kind]?.word ?? e.kind}</Td>
+              <Td>
+                <form action={setKind} className="flex gap-2">
+                  <input type="hidden" name="id" value={e.id} />
+                  <label className="sr-only" htmlFor={`kind-${e.id}`}>
+                    Kind of {e.label}
+                  </label>
+                  <select id={`kind-${e.id}`} name="kind" defaultValue={e.kind} className="h-11 rounded-xl border border-input bg-background px-2 text-[14px]">
+                    {Object.entries(KINDS).map(([k, v]) => (
+                      <option key={k} value={k}>
+                        {v.word}
+                      </option>
+                    ))}
+                  </select>
+                  <SubmitButton variant="secondary" size="sm" pendingText="Saving...">
+                    Save
+                  </SubmitButton>
+                </form>
+              </Td>
               <Td className="font-mono text-[13px]">{e.cx}</Td>
-              <Td align="right">{used(e)}</Td>
-              <Td className="min-w-[180px]">
-                {!e.active ? <Badge>Paused</Badge> : e.last_error ? <Badge tone="red">Problem</Badge> : <Badge tone="green">On</Badge>}
+              <Td className="min-w-[160px]">
+                {!e.active ? <Badge>Paused</Badge> : e.last_error ? <Badge tone="red">Not working</Badge> : <Badge tone="green">Working</Badge>}
                 {e.last_error ? <p className="mt-1 text-[13px] text-muted-foreground">{e.last_error}</p> : null}
               </Td>
               <Td>
@@ -170,7 +109,19 @@ export default async function EnginesPage({ searchParams }: { searchParams: Prom
                       Test
                     </SubmitButton>
                   </form>
-                  <Actions table="search_engines" id={e.id} active={e.active} />
+                  <form action={toggle}>
+                    <input type="hidden" name="id" value={e.id} />
+                    <input type="hidden" name="on" value={e.active ? "0" : "1"} />
+                    <SubmitButton variant="secondary" size="sm" pendingText="Saving...">
+                      {e.active ? "Pause" : "Turn on"}
+                    </SubmitButton>
+                  </form>
+                  <form action={remove}>
+                    <input type="hidden" name="id" value={e.id} />
+                    <SubmitButton variant="danger" size="sm" pendingText="Removing..." confirm={`Remove ${e.label}?`}>
+                      Remove
+                    </SubmitButton>
+                  </form>
                 </div>
               </Td>
             </Tr>
@@ -179,7 +130,7 @@ export default async function EnginesPage({ searchParams }: { searchParams: Prom
       </Table>
 
       <Card className="mt-8">
-        <CardHeader title="Sites for each kind of engine" description="When you make an engine, add these under Sites to search." />
+        <CardHeader title="Sites to add in each kind of engine" description="When you make an engine at programmablesearchengine.google.com, add these under Sites to search." />
         <ul className="space-y-2 text-[15px]">
           {Object.values(KINDS).map((k) => (
             <li key={k.word}>
@@ -189,27 +140,5 @@ export default async function EnginesPage({ searchParams }: { searchParams: Prom
         </ul>
       </Card>
     </>
-  );
-}
-
-function Actions({ table, id, active }: { table: "search_keys" | "search_engines"; id: string; active: boolean }) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      <form action={toggle}>
-        <input type="hidden" name="table" value={table} />
-        <input type="hidden" name="id" value={id} />
-        <input type="hidden" name="on" value={active ? "0" : "1"} />
-        <SubmitButton variant="secondary" size="sm" pendingText="Saving...">
-          {active ? "Pause" : "Turn on"}
-        </SubmitButton>
-      </form>
-      <form action={remove}>
-        <input type="hidden" name="table" value={table} />
-        <input type="hidden" name="id" value={id} />
-        <SubmitButton variant="danger" size="sm" pendingText="Removing..." confirm="Remove this for good?">
-          Remove
-        </SubmitButton>
-      </form>
-    </div>
   );
 }

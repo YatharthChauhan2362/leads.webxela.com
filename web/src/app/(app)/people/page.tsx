@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { ContactCell } from "@/components/leads";
+import { list } from "@/components/leads";
+import { splitEmails } from "@/lib/github";
 import { timeAgo } from "@/components/shell/app-shell";
 import { buttonClass } from "@/components/ui/button";
 import { Input } from "@/components/ui/form";
-import { EmptyState, PageHeader, Stat } from "@/components/ui/layout";
+import { Avatar, EmptyState, PageHeader, Stat } from "@/components/ui/layout";
 import { THead, Table, Td, Th, Tr } from "@/components/ui/table";
 import { must, sb, type Profile } from "@/lib/db";
 import { myLeadsFilter, seesAll } from "@/lib/access";
@@ -46,7 +47,7 @@ export default async function PeoplePage({ searchParams }: { searchParams: Promi
     <>
       <PageHeader
         title="People"
-        description="Everyone from LinkedIn posts and every profile you open, with company, location and contact details, including a predicted work email."
+        description="Your contact book: everyone you found on LinkedIn, with company, place, work and personal email, phone and links. A person becomes a lead when they post a need or you save them as one."
         actions={
           <Link href="/extension" className={buttonClass("secondary")}>
             Extension setup
@@ -79,43 +80,110 @@ export default async function PeoplePage({ searchParams }: { searchParams: Promi
         <Table>
           <THead>
             <tr>
-              <Th>Name</Th>
+              <Th>Person</Th>
               <Th>Company</Th>
               <Th>Location</Th>
-              <Th>Contact</Th>
+              <Th>Work email</Th>
+              <Th>Personal email</Th>
+              <Th>Phone</Th>
+              <Th>Links</Th>
               <Th>Leads</Th>
-              <Th>Saved</Th>
             </tr>
           </THead>
           <tbody>
-            {people.map((p) => (
-              <Tr key={p.url}>
-                <Td className="min-w-[220px] align-top">
-                  <a href={p.url} target="_blank" rel="noreferrer" className="font-semibold hover:text-primary hover:underline">
-                    {p.name || p.url.replace(/^https:\/\/www\.linkedin\.com\/in\//, "").replace(/\/$/, "")}
-                  </a>
-                  {p.headline ? <p className="mt-0.5 line-clamp-2 text-[13px] text-muted-foreground">{p.headline}</p> : null}
-                </Td>
-                <Td className="min-w-[160px] align-top text-[14px]">
-                  {p.company || <span className="text-muted-foreground">Not known</span>}
-                  {p.company_domain ? <p className="text-[13px] text-muted-foreground">{p.company_domain}</p> : null}
-                </Td>
-                <Td className="min-w-[140px] align-top text-[14px]">{p.location || <span className="text-muted-foreground">Not known</span>}</Td>
-                <Td className="min-w-[240px] align-top text-[14px]">
-                  <ContactCell emails={p.emails} phones={p.phones} workEmail={p.work_email} workStatus={p.work_email_status} workConfidence={p.work_email_confidence} />
-                </Td>
-                <Td className="align-top text-[14px] whitespace-nowrap">
-                  {(leadsOf.get(p.url) ?? []).length ? (
-                    <Link href={`/leads/${leadsOf.get(p.url)![0]}`} className="font-medium text-primary hover:underline">
-                      {(leadsOf.get(p.url) ?? []).length === 1 ? "Open lead" : `${(leadsOf.get(p.url) ?? []).length} leads`}
-                    </Link>
-                  ) : (
-                    <span className="text-muted-foreground">None</span>
-                  )}
-                </Td>
-                <Td className="align-top text-[14px] whitespace-nowrap">{timeAgo(p.updated_at)}</Td>
-              </Tr>
-            ))}
+            {people.map((p) => {
+              const { personal, work } = splitEmails(list(p.emails));
+              const leadIds = leadsOf.get(p.url) ?? [];
+              const showWork = p.work_email && !work.includes(p.work_email);
+              return (
+                <Tr key={p.url}>
+                  <Td className="min-w-[240px] align-top">
+                    <div className="flex items-start gap-3">
+                      {p.photo_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={p.photo_url} alt="" width={40} height={40} className="size-10 shrink-0 rounded-xl object-cover" />
+                      ) : (
+                        <Avatar name={p.name || "?"} size={40} />
+                      )}
+                      <div className="min-w-0">
+                        <p className="font-semibold">{p.name || p.url.replace(/^https:\/\/www\.linkedin\.com\/in\//, "").replace(/\/$/, "")}</p>
+                        {p.headline ? <p className="line-clamp-2 text-[13px] text-muted-foreground">{p.headline}</p> : null}
+                      </div>
+                    </div>
+                  </Td>
+                  <Td className="min-w-[150px] align-top text-[14px]">
+                    {p.company || <span className="text-muted-foreground">Not known</span>}
+                    {p.company_domain ? <p className="text-[13px] text-muted-foreground">{p.company_domain}</p> : null}
+                  </Td>
+                  <Td className="min-w-[130px] align-top text-[14px]">{p.location || <span className="text-muted-foreground">Not known</span>}</Td>
+                  <Td className="min-w-[200px] align-top text-[14px]">
+                    {work.map((e) => (
+                      <a key={e} href={`mailto:${e}`} className="block break-all text-primary hover:underline">
+                        {e}
+                      </a>
+                    ))}
+                    {showWork ? (
+                      <div>
+                        <a href={`mailto:${p.work_email}`} className="break-all text-primary hover:underline">
+                          {p.work_email}
+                        </a>
+                        <p className="text-[12.5px] text-muted-foreground">
+                          {p.work_email_status === "found" ? "Found" : p.work_email_status === "likely" ? "Likely" : "Guess"} {p.work_email_confidence ?? ""}%
+                        </p>
+                      </div>
+                    ) : null}
+                    {!work.length && !showWork ? <span className="text-muted-foreground">None yet</span> : null}
+                  </Td>
+                  <Td className="min-w-[180px] align-top text-[14px]">
+                    {personal.length ? (
+                      personal.map((e) => (
+                        <a key={e} href={`mailto:${e}`} className="block break-all text-primary hover:underline">
+                          {e}
+                        </a>
+                      ))
+                    ) : (
+                      <span className="text-muted-foreground">None yet</span>
+                    )}
+                  </Td>
+                  <Td className="min-w-[140px] align-top text-[14px] whitespace-nowrap">
+                    {list(p.phones).length ? (
+                      list(p.phones).map((x) => (
+                        <a key={x} href={`tel:${x.replace(/[^\d+]/g, "")}`} className="block text-primary hover:underline">
+                          {x}
+                        </a>
+                      ))
+                    ) : (
+                      <span className="text-muted-foreground">None yet</span>
+                    )}
+                  </Td>
+                  <Td className="align-top text-[14px] whitespace-nowrap">
+                    <a href={p.url} target="_blank" rel="noreferrer" className="block font-medium text-primary hover:underline">
+                      LinkedIn
+                    </a>
+                    {p.github_url ? (
+                      <a href={p.github_url} target="_blank" rel="noreferrer" className="block font-medium text-primary hover:underline">
+                        GitHub
+                      </a>
+                    ) : null}
+                    {list(p.websites)[0] ? (
+                      <a href={list(p.websites)[0]} target="_blank" rel="noreferrer" className="block font-medium text-primary hover:underline">
+                        Website
+                      </a>
+                    ) : null}
+                  </Td>
+                  <Td className="align-top text-[14px] whitespace-nowrap">
+                    {leadIds.length ? (
+                      <Link href={`/leads/${leadIds[0]}`} className="font-medium text-primary hover:underline">
+                        {leadIds.length === 1 ? "Open lead" : `${leadIds.length} leads`}
+                      </Link>
+                    ) : (
+                      <span className="text-muted-foreground">None</span>
+                    )}
+                    <p className="text-[12.5px] text-muted-foreground">Saved {timeAgo(p.updated_at)}</p>
+                  </Td>
+                </Tr>
+              );
+            })}
           </tbody>
         </Table>
       )}

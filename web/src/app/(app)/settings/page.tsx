@@ -4,7 +4,7 @@ import { Field, Input, Textarea } from "@/components/ui/form";
 import { Callout, Card, CardHeader, PageHeader } from "@/components/ui/layout";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { aiEnabled } from "@/lib/ai";
-import { searchEnabled, searchesLeftToday } from "@/lib/google-search";
+import { sb } from "@/lib/db";
 import { requireMember } from "@/lib/session";
 import { emailEnabled, emailTo } from "@/lib/alerts";
 import { getSettings, lines } from "@/lib/db";
@@ -13,7 +13,8 @@ import { linkedinSearchUrl } from "@/lib/linkedin";
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await requireMember("admin");
   const email = emailEnabled();
-  const searchOn = await searchEnabled();
+  const engineCount = (await sb().from("search_engines").select("id", { count: "exact", head: true }).eq("active", true)).count ?? 0;
+  const searchOn = engineCount > 0;
   const settings = await getSettings();
   return (
     <>
@@ -26,8 +27,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         </Callout>
         <Callout tone={searchOn ? "green" : "amber"} label={searchOn ? "Google search is on" : "Google search is off"}>
           {searchOn
-            ? `Finds LinkedIn posts every 3 hours and public emails for Find. ${await searchesLeftToday()} free searches left today.`
-            : "Add a Google API key and engines on the Search engines page."}
+            ? `${engineCount} search engine${engineCount === 1 ? "" : "s"} ready on the Search page.`
+            : "Add your engines on the Search engines page."}
         </Callout>
         <Callout tone={email ? "green" : "amber"} label={email ? "Email alerts are on" : "Email alerts are off"}>
           {email ? `Hot leads are emailed to ${emailTo()} through Zoho.` : "Add the Zoho EMAIL_USER and EMAIL_PASS to .env.local to get hot leads by email."}
