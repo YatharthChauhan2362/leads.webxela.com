@@ -1,13 +1,15 @@
 import { notFound } from "next/navigation";
-import { addToLeads, assignLead, deleteLeads, saveNotes, setFollowUp, setStatus, updateLead } from "@/app/actions";
-import { ContactCell, SOURCES, STATUS_WORDS, ScoreBadge } from "@/components/leads";
+import { addToLeads, assignLead, deleteLeads, saveNotes, setDealValue, setFollowUp, updateLead } from "@/app/actions";
+import { ContactCell, SOURCES, STATUS_WORDS, ScoreBadge, money } from "@/components/leads";
 import { timeAgo } from "@/components/shell/app-shell";
 import { buttonClass } from "@/components/ui/button";
 import { Flash } from "@/components/ui/flash";
 import { Field, FormGrid, Input, Textarea } from "@/components/ui/form";
-import { Badge, Card, CardHeader, PageHeader } from "@/components/ui/layout";
+import { Badge, Callout, Card, CardHeader, PageHeader } from "@/components/ui/layout";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { LiveRefresh, StatusPicker } from "@/components/status-picker";
 import { requireLeadAccess, seesAll } from "@/lib/access";
+import { findDuplicates } from "@/lib/duplicates";
 import { must, sb, type Lead } from "@/lib/db";
 import { currentMember } from "@/lib/session";
 
@@ -20,7 +22,12 @@ function said(e: Event) {
     case "created":
       return `added this lead${e.to_value ? ` (${SOURCES[e.to_value] ?? e.to_value})` : ""}`;
     case "status":
-      return `moved it from ${word(e.from_value)} to ${word(e.to_value)}`;
+      if (e.to_value?.startsWith("lost:")) return `marked it Lost: ${e.to_value.slice(5)}`;
+      return `moved it from ${word(e.from_value?.split(":")[0] ?? null)} to ${word(e.to_value)}`;
+    case "deal":
+      return e.to_value === "cleared" ? "cleared the deal value" : `set the deal value to ${money(Number(e.to_value))}`;
+    case "duplicate":
+      return `added it, but ${e.to_value} already had this person`;
     case "assigned":
       return e.to_value === "Nobody" ? "removed the owner" : `gave it to ${e.to_value}`;
     case "follow_up":
@@ -40,10 +47,11 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
   const all = seesAll(me);
   const lead = must(await sb().from("leads").select("*").eq("id", id).maybeSingle()) as Lead | null;
   if (!lead) notFound();
-  const [people, events] = await Promise.all([
+  const [people, events, dups] = await Promise.all([
     // Everyone can hand a lead to a teammate, so everyone sees teammates' names. Only admins see emails elsewhere.
     sb().from("members").select("id, name, email").neq("status", "disabled").order("name").then((r) => must(r) as { id: string; name: string | null; email: string }[]),
     sb().from("lead_events").select("id, member_name, kind, from_value, to_value, at").eq("lead_id", id).order("at", { ascending: false }).limit(100).then((r) => must(r) as Event[]),
+    lead.is_lead ? findDuplicates({ emails: lead.emails, authorUrl: lead.author_url, postUrl: lead.post_url, excludeId: lead.id }) : Promise.resolve([]),
   ]);
   const nameOf = (mid: string | null) => {
     const p = people.find((x) => x.id === mid);
@@ -81,6 +89,12 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
         }
       />
       <Flash searchParams={searchParams} />
+      <LiveRefresh />
+      {dups.length ? (
+        <Callout tone="amber" label="Someone else has this person too" className="mb-6">
+          {dups.map((d) => `${d.owner} (${STATUS_WORDS[d.status] ?? d.status})`).join(", ")}. Agree who works it, then mark the other one Lost.
+        </Callout>
+      ) : null}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
         <div className="space-y-6">
@@ -89,7 +103,9 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
               <Badge tone={lead.status === "paid" ? "green" : lead.status === "lost" ? "red" : "blue"}>{STATUS_WORDS[lead.status] ?? lead.status}</Badge>
               <ScoreBadge score={lead.score} />
               <Badge>{SOURCES[lead.source] ?? lead.source}</Badge>
+              {lead.deal_value !== null ? <Badge tone="green">{money(Number(lead.deal_value))}</Badge> : null}
             </div>
+            {lead.status === "lost" && lead.lost_reason ? <p className="mb-3 text-[15px] text-danger">Lost: {lead.lost_reason}</p> : null}
             <p className="text-[15px] leading-relaxed whitespace-pre-line">{lead.text}</p>
             <div className="mt-4 border-t border-border pt-4 text-[15px]">
               <ContactCell emails={lead.emails} phones={lead.phones} workEmail={lead.work_email} workStatus={lead.work_email_status} workConfidence={lead.work_email_confidence} />
@@ -165,20 +181,17 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
         <div className="space-y-6">
           <Card>
             <CardHeader title="Status" />
-            <form action={setStatus} className="flex gap-2">
+            <StatusPicker id={lead.id} status={lead.status} label="Status" wide />
+            {lead.status === "lost" && lead.lost_reason ? <p className="mb-3 text-[14px] text-muted-foreground">Reason: {lead.lost_reason}</p> : null}
+            <form action={setDealValue} className="space-y-2 border-t border-border pt-3">
               <input type="hidden" name="id" value={lead.id} />
               <input type="hidden" name="back" value={back} />
-              <label className="sr-only" htmlFor="status">
-                Status
-              </label>
-              <select id="status" name="status" defaultValue={lead.status} className={select}>
-                {Object.entries(STATUS_WORDS).map(([k, v]) => (
-                  <option key={k} value={k}>
-                    {v}
-                  </option>
-                ))}
-              </select>
-              <SubmitButton pendingText="Saving...">Save</SubmitButton>
+              <Field label="Deal value in rupees" htmlFor="deal_value" optional hint="When the contract is signed.">
+                <div className="flex gap-2">
+                  <Input id="deal_value" name="deal_value" inputMode="decimal" defaultValue={lead.deal_value ?? ""} placeholder="50000" maxLength={16} />
+                  <SubmitButton variant="secondary" pendingText="Saving...">Save</SubmitButton>
+                </div>
+              </Field>
             </form>
           </Card>
 

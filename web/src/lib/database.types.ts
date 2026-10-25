@@ -181,12 +181,14 @@ export type Database = {
           contact_checked_at: string | null
           contact_note: string | null
           contacted_at: string | null
+          deal_value: number | null
           emails: string
           follow_up_at: string | null
           headline: string | null
           id: number
           intent: string | null
           is_lead: boolean
+          lost_reason: string | null
           matched_search: string | null
           notes: string
           phones: string
@@ -220,12 +222,14 @@ export type Database = {
           contact_checked_at?: string | null
           contact_note?: string | null
           contacted_at?: string | null
+          deal_value?: number | null
           emails?: string
           follow_up_at?: string | null
           headline?: string | null
           id?: never
           intent?: string | null
           is_lead?: boolean
+          lost_reason?: string | null
           matched_search?: string | null
           notes?: string
           phones?: string
@@ -259,12 +263,14 @@ export type Database = {
           contact_checked_at?: string | null
           contact_note?: string | null
           contacted_at?: string | null
+          deal_value?: number | null
           emails?: string
           follow_up_at?: string | null
           headline?: string | null
           id?: never
           intent?: string | null
           is_lead?: boolean
+          lost_reason?: string | null
           matched_search?: string | null
           notes?: string
           phones?: string

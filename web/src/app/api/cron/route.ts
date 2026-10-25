@@ -28,16 +28,17 @@ export async function GET(req: Request) {
 
   // 2. Follow up reminders: once a day per lead that is due and still open.
   const due = must(
-    await sb().from("leads").select("id, author, reason, assigned_to, follow_up_at").not("assigned_to", "is", null).lte("follow_up_at", today).not("status", "in", "(paid,lost)"),
-  ) as Pick<Lead, "id" | "author" | "reason" | "assigned_to" | "follow_up_at">[];
+    await sb().from("leads").select("id, author, reason, assigned_to, captured_by, follow_up_at").eq("is_lead", true).lte("follow_up_at", today).not("status", "in", "(paid,lost)"),
+  ) as Pick<Lead, "id" | "author" | "reason" | "assigned_to" | "captured_by" | "follow_up_at">[];
   if (due.length) {
     const sent = must(
       await sb().from("notifications").select("lead_id").eq("kind", "follow_up").gte("created_at", `${today}T00:00:00+05:30`).in("lead_id", due.map((d) => d.id)),
     ) as { lead_id: number }[];
     const done = new Set(sent.map((x) => x.lead_id));
     let n = 0;
-    for (const l of due.filter((d) => !done.has(d.id))) {
-      await notify([l.assigned_to], "follow_up", `Follow up today: ${l.author ?? "a lead"}`, l.reason, l.id);
+    for (const l of due.filter((d) => !done.has(d.id) && (d.assigned_to ?? d.captured_by))) {
+      // The owner: who it was given to, or who added it if nobody was.
+      await notify([l.assigned_to ?? l.captured_by], "follow_up", `Follow up today: ${l.author ?? "a lead"}`, l.reason, l.id);
       n++;
     }
     out.followUps = n;
@@ -56,12 +57,12 @@ async function dailyDigest(today: string) {
   const people = must(await sb().from("members").select("id, email, name, role").eq("status", "active")) as { id: string; email: string; name: string | null; role: string }[];
   const since = new Date(Date.now() - 24 * 3600_000).toISOString();
   const [open, fresh] = await Promise.all([
-    sb().from("leads").select("id, author, assigned_to, follow_up_at, status, score").in("status", ["new", "contacted", "interested", "proposal", "contract"]).not("assigned_to", "is", null).then((r) => must(r) as Lead[]),
+    sb().from("leads").select("id, author, assigned_to, captured_by, follow_up_at, status, score").eq("is_lead", true).in("status", ["new", "contacted", "interested", "proposal", "contract"]).then((r) => must(r) as Lead[]),
     sb().from("leads").select("id, score, status").gte("captured_at", since).then((r) => must(r) as Pick<Lead, "id" | "score" | "status">[]),
   ]);
   let sentCount = 0;
   for (const p of people) {
-    const mine = open.filter((l) => l.assigned_to === p.id);
+    const mine = open.filter((l) => (l.assigned_to ?? l.captured_by) === p.id);
     const dueToday = mine.filter((l) => l.follow_up_at && l.follow_up_at <= today);
     const lines = [`Good morning ${(p.name || p.email).split(/[ @]/)[0]}.`];
     if (dueToday.length) lines.push(`Follow up today: ${dueToday.map((l) => l.author ?? "a lead").join(", ")}.`);

@@ -580,7 +580,6 @@
           <div class="menu" data-menu>
             <button data-act="save">Save as lead</button>
             <button data-act="mine">Save and take it myself</button>
-            <button data-act="bde">Save and give to a BDE</button>
             <div class="fu"><span>Follow up on</span><input type="date" value="${today}" data-date><button data-act="follow_up">Set</button></div>
             <button data-act="open">Open in the app</button>
             <button data-act="copyall">Copy all contact details</button>

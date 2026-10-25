@@ -17,7 +17,7 @@ export const JOB_WORDS: Record<string, string> = { lead_generator: "Lead generat
 
 // The team's pipeline, in order.
 export const STATUS_WORDS: Record<string, string> = {
-  new: "New",
+  new: "Not contacted yet",
   contacted: "Contacted",
   interested: "Interested",
   proposal: "Proposal sent",
@@ -82,3 +82,6 @@ export function ContactCell({
     </div>
   );
 }
+
+/** Rupees, written the Indian way. */
+export const money = (n: number) => `Rs ${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;

@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { addToLeads, checkNow, deleteLeads, setStatus } from "@/app/actions";
-import { ContactCell, SOURCES, STATUS_WORDS, ScoreBadge } from "@/components/leads";
+import { addToLeads, checkNow, deleteLeads } from "@/app/actions";
+import { LiveRefresh, StatusPicker } from "@/components/status-picker";
+import { ContactCell, SOURCES, ScoreBadge } from "@/components/leads";
 import { timeAgo } from "@/components/shell/app-shell";
 import { buttonClass } from "@/components/ui/button";
 import { Flash } from "@/components/ui/flash";
@@ -15,7 +16,7 @@ import { myLeadsFilter, ownedByFilter, seesAll } from "@/lib/access";
 type SP = { [key: string]: string | string[] | undefined };
 
 const STATUS_TABS = [
-  { key: "new", label: "New" },
+  { key: "new", label: "Not contacted yet" },
   { key: "contacted", label: "Contacted" },
   { key: "interested", label: "Interested" },
   { key: "proposal", label: "Proposal sent" },
@@ -76,8 +77,8 @@ export async function LeadsView({ searchParams, mode }: { searchParams: Promise<
   const [leads, stats, people] = await Promise.all([
     query.limit(300).then((r) => must(r) as Lead[]),
     getSetting("alert_score").then(async (alert): Promise<Stats> => {
-      // Numbers for this list only. A member's numbers count only their own.
-      let statsQuery = sb().from("leads").select("status, score, captured_at, emails, phones, work_email, follow_up_at").eq("is_lead", !finds).limit(20000);
+      // Numbers for this list only, with the same score filter, so they match what is shown. A member's numbers count only their own.
+      let statsQuery = sb().from("leads").select("status, score, captured_at, emails, phones, work_email, follow_up_at").eq("is_lead", !finds).gte("score", min).limit(20000);
       if (!all && me) statsQuery = statsQuery.or(myLeadsFilter(me));
       const mine = must(await statsQuery) as Pick<
         Lead,
@@ -144,6 +145,7 @@ export async function LeadsView({ searchParams, mode }: { searchParams: Promise<
         }
       />
       <Flash searchParams={sp} />
+      <LiveRefresh />
 
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Last 24 hours" value={today} note={finds ? "New finds" : "Leads added"} />
@@ -335,23 +337,7 @@ export async function LeadsView({ searchParams, mode }: { searchParams: Promise<
                         </SubmitButton>
                       </form>
                     ) : (
-                    <form action={setStatus} className="flex flex-col gap-1.5">
-                      <input type="hidden" name="id" value={l.id} />
-                      <input type="hidden" name="back" value={backTo} />
-                      <label className="sr-only" htmlFor={`status-${l.id}`}>
-                        Status for {l.author}
-                      </label>
-                      <select id={`status-${l.id}`} name="status" defaultValue={l.status} className="h-11 rounded-xl border border-input bg-background px-2 text-[14px]">
-                        {Object.entries(STATUS_WORDS).map(([k, v]) => (
-                          <option key={k} value={k}>
-                            {v}
-                          </option>
-                        ))}
-                      </select>
-                      <SubmitButton variant="secondary" size="sm" pendingText="Saving...">
-                        Save
-                      </SubmitButton>
-                    </form>
+                    <StatusPicker id={l.id} status={l.status} label={`Status for ${l.author ?? "lead"}`} />
                     )}
                   </Td>
                 </Tr>

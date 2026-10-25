@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { saveHitAsLead } from "./actions";
+import { normUrl, urlHash } from "@/lib/url-hash";
+import { clientIntent } from "@/lib/client-intent";
 import { Card, EmptyState } from "@/components/ui/layout";
 import { THead, Table, Td, Th, Tr } from "@/components/ui/table";
 import { COUNTRIES } from "@/lib/places";
@@ -138,6 +140,7 @@ export function GoogleBox({
   newest = false,
   known = [],
   onlyNew = true,
+  clientsOnly = false,
   services = [],
   places = [],
 }: {
@@ -151,11 +154,13 @@ export function GoogleBox({
   newest?: boolean;
   known?: string[];
   onlyNew?: boolean;
+  clientsOnly?: boolean;
   services?: string[];
   places?: string[];
 }) {
   const [hits, setHits] = useState<Ranked[] | null>(null);
   const [skipped, setSkipped] = useState(0);
+  const [notClients, setNotClients] = useState(0);
   const [progress, setProgress] = useState("");
   const [error, setError] = useState<string | null>(null);
   const started = useRef(false);
@@ -169,8 +174,9 @@ export function GoogleBox({
     const seen = new Set<string>();
     const kept: Ranked[] = [];
     // Already saved, or shown before for this same search on this browser: skip those.
-    const norm = (u: string) => u.toLowerCase().replace(/^https?:\/\/[a-z]{2,3}\.linkedin/, "https://www.linkedin").replace(/[?#].*$/, "").replace(/\/$/, "");
-    const savedSet = new Set(known.map(norm));
+    const norm = normUrl;
+    // "known" holds hashes of links the team already has.
+    const savedSet = new Set(known);
     const memoryKey = `search-seen:${cx}:${q}`;
     let shownBefore = new Set<string>();
     try {
@@ -179,6 +185,7 @@ export function GoogleBox({
       // Private window: nothing remembered.
     }
     let skippedCount = 0;
+    let notClientCount = 0;
     const remember = () => {
       try {
         const all = [...shownBefore, ...kept.map((k) => norm(k.link))].slice(-1000);
@@ -223,14 +230,21 @@ export function GoogleBox({
             for (const h of list) {
               seen.add(h.link);
               const key = norm(h.link);
-              if (onlyNew && (savedSet.has(key) || shownBefore.has(key))) {
+              if (onlyNew && (savedSet.has(urlHash(h.link)) || shownBefore.has(key))) {
                 skippedCount++;
+                continue;
+              }
+              // Strict: only people asking to hire a developer, freelancer or agency.
+              const check = clientsOnly ? clientIntent(`${h.title} ${h.snippet}`) : null;
+              if (check && !check.client) {
+                notClientCount++;
                 continue;
               }
               const confirmed = confirmedIn(h);
               if (!confirmedOnly || confirmed) kept.push({ ...h, confirmed, ...rank(h, kind, services, places) });
             }
             setSkipped(skippedCount);
+            setNotClients(notClientCount);
             setHits(sortRanked(kept).slice(0, count));
             // Google gives 10 a page and at most 10 pages. Keep going until we have enough.
             if (kept.length >= count || (results ?? []).length < 10 || page >= 10) {
@@ -270,7 +284,7 @@ export function GoogleBox({
       clearTimeout(t);
       unlockScroll();
     };
-  }, [cx, q, count, confirmTerms, confirmedOnly, newest, known, onlyNew, services, places, kind]);
+  }, [cx, q, count, confirmTerms, confirmedOnly, newest, known, onlyNew, clientsOnly, services, places, kind]);
 
   if (!q) return null;
   if (error) return <EmptyState title="Search did not load" description={error} />;
@@ -287,13 +301,16 @@ export function GoogleBox({
           {hits.length} new result{hits.length === 1 ? "" : "s"}, best first
           {confirmTerms.length ? `, ${hits.filter((h) => h.confirmed).length} with the location confirmed` : ""}
           {skipped ? `. Skipped ${skipped} you already saved or saw before.` : ""}
+          {notClients ? `. Hid ${notClients} that were not clients: job ads, sellers, job seekers or tips.` : ""}
         </p>
       ) : null}
       {hits === null ? null : hits.length === 0 ? (
         <EmptyState
-          title={skipped ? "No new results" : "No results"}
+          title={skipped || notClients ? "No new clients" : "No results"}
           description={
-            skipped
+            notClients && !skipped
+              ? `Hid ${notClients} results that were job ads, sellers, job seekers or tips. Try words clients use, like "looking for a developer" or "need an agency", or tick Show every post.`
+              : skipped
               ? `All ${skipped} results were already saved or shown before. Change the words or filters, or tick Show results I have already seen.`
               : confirmedOnly
                 ? "Nothing mentioned that place. Untick Confirmed location only, or try a bigger city."

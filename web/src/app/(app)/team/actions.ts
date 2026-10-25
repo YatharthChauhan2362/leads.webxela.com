@@ -138,7 +138,7 @@ export async function setAutoAccess(formData: FormData) {
   const me = await requireMember("admin");
   const who = await target(formData.get("id"));
   const on = formData.get("on") === "1";
-  if (!mayChange(me, who)) done("Only the owner can change admins and owners.", "error");
+  if (who.id !== me?.id && !mayChange(me, who)) done("Only the owner can change admins and owners.", "error");
   must(await sb().from("members").update({ auto_access: on }).eq("id", who.id));
   await logActivity(me, "access", { target: who.email, detail: `Automatic features ${on ? "on" : "off"}` });
   done(`Automatic features ${on ? "turned on" : "turned off"} for ${who.name || who.email}.`);

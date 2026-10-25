@@ -7,6 +7,7 @@ import { cleanProfileUrl, ingestPosts, saveProfile } from "@/lib/ingest";
 import { requireMember } from "@/lib/session";
 import { sb } from "@/lib/db";
 import { storePhoto } from "@/lib/photos";
+import { findDuplicates } from "@/lib/duplicates";
 
 const Hit = z.object({
   title: z.string().max(500),
@@ -24,9 +25,12 @@ function back(path: string, msg: string, kind: "ok" | "error" = "ok"): never {
 
 /** Saves a search result as a lead, credited to you, whatever its score. */
 export async function saveHitAsLead(formData: FormData) {
-  const me = await requireMember("admin");
+  const me = await requireMember();
   const h = Hit.parse(Object.fromEntries(formData));
   const slug = h.link.match(/linkedin\.com\/(?:in|posts)\/([^_/?]+)/)?.[1];
+  // Someone on the team already works this person or post: say who, do not add it twice.
+  const dups = await findDuplicates({ authorUrl: slug && /linkedin\.com\/in\//.test(h.link) ? `https://www.linkedin.com/in/${slug}/` : null, postUrl: h.link });
+  if (dups.length) back(h.back, `Already a lead with ${dups.map((d) => d.owner).join(", ")}.`, "error");
   const res = await ingestPosts(
     [
       {

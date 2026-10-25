@@ -250,7 +250,8 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
                   </Link>
                 </Td>
                 <Td className="align-middle">
-                  {editable ? (
+                  {/* You can always switch your own automatic features. */}
+                  {editable || self ? (
                     <form action={setAutoAccess}>
                       <input type="hidden" name="id" value={m.id} />
                       <input type="hidden" name="on" value={m.auto_access ? "0" : "1"} />

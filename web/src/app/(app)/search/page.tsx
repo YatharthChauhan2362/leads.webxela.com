@@ -7,6 +7,7 @@ import { logActivity } from "@/lib/activity";
 import { getSettings, lines, must, sb } from "@/lib/db";
 import { requireMember } from "@/lib/session";
 import { COUNTRIES } from "@/lib/places";
+import { urlHash } from "@/lib/url-hash";
 import { Field, Select } from "@/components/ui/form";
 
 type Kind = "posts" | "profiles" | "companies" | "contacts" | "elsewhere";
@@ -35,21 +36,24 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   const newest = sp.newest === "1";
   // Show only results not seen before. On by default; "all=1" shows everything again.
   const showAll = sp.all === "1";
+  // Posts are strict by default: only people who want to pay a developer, freelancer or agency.
+  const anyPost = sp.any === "1";
   const t = TYPES.find((x) => x.key === type)!;
-  const me = await requireMember("admin");
+  const me = await requireMember();
   // Engines are added on the Search engines page. Only the engine ID is needed, no API key.
   const engines = must(await sb().from("search_engines").select("kind, cx").eq("active", true)) as { kind: string; cx: string }[];
   const cx = engines.find((e) => e.kind === type)?.cx ?? null;
   const have = new Set(engines.map((e) => e.kind));
 
-  const params = new URLSearchParams(Object.entries({ type, q, country, city, role, company, exclude, count: String(count), confirmed: confirmed ? "1" : "", newest: newest ? "1" : "", all: showAll ? "1" : "" }).filter(([, v]) => v));
+  const params = new URLSearchParams(Object.entries({ type, q, country, city, role, company, exclude, count: String(count), confirmed: confirmed ? "1" : "", newest: newest ? "1" : "", all: showAll ? "1" : "", any: anyPost ? "1" : "" }).filter(([, v]) => v));
   // Everyone and every post we already have, so search never shows them again.
   const [savedLeads, savedPeople, s] = await Promise.all([
     sb().from("leads").select("post_url, author_url").limit(20000).then((r) => must(r) as { post_url: string | null; author_url: string | null }[]),
     sb().from("profiles").select("url").limit(20000).then((r) => must(r) as { url: string }[]),
     getSettings(),
   ]);
-  const known = [...new Set([...savedLeads.flatMap((l) => [l.post_url, l.author_url]), ...savedPeople.map((p) => p.url)].filter((x): x is string => Boolean(x)))];
+  // Only short hashes go to the browser, so members never receive teammates' links.
+  const known = [...new Set([...savedLeads.flatMap((l) => [l.post_url, l.author_url]), ...savedPeople.map((p) => p.url)].filter((x): x is string => Boolean(x)).map(urlHash))];
   const back = `/search?${params}`;
   if (q && cx) await logActivity(me, "lookup", { detail: `Searched ${t.label}: ${q}${country ? `, ${COUNTRIES[country].name}` : ""}${city ? `, ${city}` : ""}` });
 
@@ -149,6 +153,15 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
               </label>
               {type === "posts" ? (
                 <label className="flex items-start gap-3">
+                  <input type="checkbox" name="any" value="1" defaultChecked={anyPost} className="mt-0.5 size-5 accent-primary" />
+                  <span>
+                    <span className="block text-[15px] font-medium">Show every post</span>
+                    <span className="block text-[13px] text-muted-foreground">Off by default, so you only see people asking for a developer, freelancer or agency. No job ads, sellers, job seekers or tips.</span>
+                  </span>
+                </label>
+              ) : null}
+              {type === "posts" ? (
+                <label className="flex items-start gap-3">
                   <input type="checkbox" name="newest" value="1" defaultChecked={newest} className="mt-0.5 size-5 accent-primary" />
                   <span className="block text-[15px] font-medium">Newest first</span>
                 </label>
@@ -167,7 +180,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         <EmptyState title={`Search ${t.label.toLowerCase()}`} description={`Type what you are looking for, for example: ${t.example}`} />
       ) : (
         <GoogleBox
-          key={`${cx}:${fullQuery}:${count}:${confirmed}:${showAll}`}
+          key={`${cx}:${fullQuery}:${count}:${confirmed}:${showAll}:${anyPost}`}
           cx={cx}
           q={fullQuery}
           back={back}
@@ -178,6 +191,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
           newest={newest}
           known={showAll ? [] : known}
           onlyNew={!showAll}
+          clientsOnly={type === "posts" && !anyPost}
           services={lines(s.pref_services)}
           places={lines(s.pref_locations)}
         />

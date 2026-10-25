@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Leads by Yatri Cloud",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "description": "Saves LinkedIn posts from people who need a project built, and their public contact info, to Yatri Leads.",
   "permissions": ["storage", "alarms", "tabs", "cookies", "scripting", "notifications"],
   "host_permissions": [

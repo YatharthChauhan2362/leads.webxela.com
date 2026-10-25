@@ -1,4 +1,5 @@
 import "server-only";
+import { clientIntent } from "./client-intent";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { getSettings, lines, must, sb, type Lead, type Profile } from "./db";
@@ -89,13 +90,18 @@ export async function ingestPosts(posts: PostIn[], opts: { force?: boolean; capt
     if (known.has(key)) {
       // Saving a daily find by hand turns it into a lead.
       if (opts.force) {
-        const up = must(await sb().from("leads").update({ is_lead: true }).eq("post_key", key).eq("is_lead", false).select("id")) as { id: number }[];
+        // The person who picks a find becomes the one who added it, so it shows in their leads.
+        const up = must(
+          await sb().from("leads").update({ is_lead: true, ...(opts.capturedBy ? { captured_by: opts.capturedBy } : {}) }).eq("post_key", key).eq("is_lead", false).select("id"),
+        ) as { id: number }[];
         added += up.length;
       }
       continue;
     }
     known.add(key);
     const authorUrl = p.source === "linkedin" ? cleanProfileUrl(p.authorUrl) : (p.authorUrl ?? null);
+    // Strict by default: only people who want to pay a developer, freelancer or agency. No job ads, sellers or tips.
+    if (!opts.force && settings.strict_clients !== "off" && !clientIntent(`${p.text}\n${p.headline ?? ""}`).client) continue;
     const s = await scorePost(p.text, p.author, p.headline);
     // The admin's preferences: words that rule a post out, lead types we want, services and places we serve.
     const lowerText = `${p.text}\n${p.headline ?? ""}`.toLowerCase();

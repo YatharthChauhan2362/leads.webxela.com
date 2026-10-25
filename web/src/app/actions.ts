@@ -14,14 +14,15 @@ import { logActivity } from "@/lib/activity";
 import { whiteContrast } from "@/lib/brand";
 import { assignTo, pickBde } from "@/lib/assign";
 import { recordEvent, tellOthers } from "@/lib/history";
+import { findDuplicates } from "@/lib/duplicates";
 import { STATUS_WORDS } from "@/components/leads";
 import { pollSources } from "@/lib/sources";
 
 const STATUSES = ["new", "contacted", "interested", "proposal", "contract", "paid", "lost"] as const;
 
-type LeadOwners = { id: number; author: string | null; status: string; assigned_to: string | null; captured_by: string | null; follow_up_at: string | null };
+type LeadOwners = { id: number; author: string | null; status: string; assigned_to: string | null; captured_by: string | null; follow_up_at: string | null; deal_value: number | null; lost_reason: string | null };
 async function owners(id: number) {
-  return must(await sb().from("leads").select("id, author, status, assigned_to, captured_by, follow_up_at").eq("id", id).single()) as LeadOwners;
+  return must(await sb().from("leads").select("id, author, status, assigned_to, captured_by, follow_up_at, deal_value, lost_reason").eq("id", id).single()) as LeadOwners;
 }
 const Id = z.coerce.number().int().positive();
 
@@ -36,24 +37,57 @@ function back(formData: FormData, msg: string, kind: "ok" | "error" = "ok"): nev
   redirect(`${url.pathname}${url.search}${url.hash}`);
 }
 
-export async function setStatus(formData: FormData) {
+/**
+ * Changes a lead's status straight from the picker, without reloading the page.
+ * Lost needs a reason. Returns a short message for the picker to show.
+ */
+export async function changeStatus(input: { id: number; status: string; lostReason?: string }): Promise<{ ok: boolean; message: string }> {
   const me = await requireMember();
-  const id = Id.parse(formData.get("id"));
+  const id = Id.parse(input.id);
   await requireLeadAccess(me, id);
-  const status = z.enum(STATUSES).parse(formData.get("status"));
+  const parsed = z.enum(STATUSES).safeParse(input.status);
+  if (!parsed.success) return { ok: false, message: "Pick a status." };
+  const status = parsed.data;
+  const reason = (input.lostReason ?? "").trim().slice(0, 500);
+  if (status === "lost" && !reason) return { ok: false, message: "Say in a few words why it was lost." };
   const before = await owners(id);
-  if (before.status === status) back(formData, "No change.");
+  if (before.status === status && !(status === "lost" && reason !== before.lost_reason)) return { ok: true, message: "No change." };
   const now = new Date().toISOString();
   must(
     await sb()
       .from("leads")
-      .update({ status, is_lead: true, ...(status === "contacted" ? { contacted_at: now } : {}), ...(status === "paid" ? { won_at: now } : {}) })
+      .update({
+        status,
+        is_lead: true,
+        ...(status === "contacted" ? { contacted_at: now } : {}),
+        ...(status === "paid" ? { won_at: now } : {}),
+        ...(status === "lost" ? { lost_reason: reason } : {}),
+      })
       .eq("id", id),
   );
-  await recordEvent(id, me, "status", before.status, status);
-  await tellOthers(before, me, `${me?.name || "Someone"} moved ${before.author ?? "a lead"} to ${STATUS_WORDS[status]}`);
+  await recordEvent(id, me, "status", before.status, status === "lost" ? `lost:${reason}` : status);
+  await tellOthers(before, me, `${me?.name || "Someone"} moved ${before.author ?? "a lead"} to ${STATUS_WORDS[status]}`, status === "lost" ? reason : undefined);
   await logActivity(me, "status", { target: `lead ${id}`, detail: `${before.status} to ${status}` });
-  back(formData, `Moved to ${STATUS_WORDS[status]}.`);
+  revalidatePath("/");
+  revalidatePath(`/leads/${id}`);
+  return { ok: true, message: `Saved: ${STATUS_WORDS[status]}` };
+}
+
+/** What a signed deal is worth, in rupees. Empty clears it. */
+export async function setDealValue(formData: FormData) {
+  const me = await requireMember();
+  const id = Id.parse(formData.get("id"));
+  await requireLeadAccess(me, id);
+  const raw = String(formData.get("deal_value") ?? "").replace(/[^0-9.]/g, "");
+  const value = raw ? z.coerce.number().min(0).max(1e12).safeParse(raw) : null;
+  if (value && !value.success) back(formData, "Deal value must be a number.", "error");
+  const before = await owners(id);
+  const next = value?.success ? value.data : null;
+  if (Number(before.deal_value ?? -1) === Number(next ?? -1)) back(formData, "No change.");
+  must(await sb().from("leads").update({ deal_value: next }).eq("id", id));
+  await recordEvent(id, me, "deal", before.deal_value === null ? null : String(before.deal_value), next === null ? "cleared" : String(next));
+  await logActivity(me, "status", { target: `lead ${id}`, detail: `Deal value ${next ?? "cleared"}` });
+  back(formData, "Deal value saved.");
 }
 
 export async function saveNotes(formData: FormData) {
@@ -279,6 +313,7 @@ export async function savePreferences(formData: FormData) {
     src_reddit: on("src_reddit"),
     src_hn: on("src_hn"),
     notify_hot: on("notify_hot"),
+    strict_clients: on("strict_clients"),
     auto_assign: on("auto_assign"),
   });
   await logActivity(me, "settings", { detail: "Changed preferences" });
@@ -331,7 +366,17 @@ export async function createLead(formData: FormData) {
   }
   await logActivity(me, "add_post", { detail: `Added a lead by hand: ${d.author}` });
   if (!res.added || !lead) back(formData, "Could not add the lead.", "error");
-  redirect(`/leads/${lead.id}?ok=${encodeURIComponent("Lead added.")}`);
+  // Warn when someone on the team already has this person, and tell them.
+  const dups = await findDuplicates({ emails: d.emails, authorUrl: d.author_url, postUrl: d.post_url, excludeId: lead.id });
+  if (dups.length) {
+    await recordEvent(lead.id, me, "duplicate", null, dups.map((x) => x.owner).join(", "));
+    for (const x of dups) {
+      const other = await owners(x.id);
+      await tellOthers(other, me, `${me?.name || "Someone"} also added ${d.author}`, "The same person is now a lead twice. Agree who works it.");
+    }
+  }
+  const msg = dups.length ? `Lead added. Heads up: ${dups.map((x) => x.owner).join(", ")} already ${dups.length === 1 ? "has" : "have"} this person.` : "Lead added.";
+  redirect(`/leads/${lead.id}?${dups.length ? "error" : "ok"}=${encodeURIComponent(msg)}`);
 }
 
 /** Edit a lead's details. */
@@ -407,4 +452,13 @@ export async function addToLeads(formData: FormData) {
   const moved = must(await sb().from("leads").update({ is_lead: true }).in("id", ids).select("id")) as { id: number }[];
   await logActivity(me, "add_post", { detail: `Added ${moved.length} daily find${moved.length === 1 ? "" : "s"} to leads` });
   back(formData, `Added ${moved.length} to leads.`);
+}
+
+/** Admins switch the hourly Claude routine on or off. When off it gets nothing to search and its finds are ignored. */
+export async function setClaudeAuto(formData: FormData) {
+  const me = await requireMember("admin");
+  const on = formData.get("on") === "on";
+  await setSettings({ claude_auto: on ? "on" : "off" });
+  await logActivity(me, "settings", { detail: `Claude routine turned ${on ? "on" : "off"}` });
+  back(formData, on ? "Claude routine is on." : "Claude routine is off. It stops on its next run.");
 }

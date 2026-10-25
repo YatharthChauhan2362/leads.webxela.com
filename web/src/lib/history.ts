@@ -3,7 +3,7 @@ import { sb } from "./db";
 import { notify } from "./notify";
 
 type Who = { id: string; name: string | null; email: string } | null;
-type Kind = "created" | "status" | "assigned" | "follow_up" | "note" | "edited";
+type Kind = "created" | "status" | "assigned" | "follow_up" | "note" | "edited" | "deal" | "duplicate";
 
 /** Writes one line in the lead's history: who did what, and when. Never throws. */
 export async function recordEvent(leadId: number, who: Who, kind: Kind, from?: string | null, to?: string | null) {

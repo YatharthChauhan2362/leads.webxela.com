@@ -44,6 +44,10 @@ export const DEFAULT_SETTINGS = {
   alert_score: "70",
   // "on" gives every new hot lead to the BDE with the fewest open leads.
   auto_assign: "off",
+  // The hourly Claude routine. "off" makes /api/brief tell it to stop and /api/ingest ignore it.
+  claude_auto: "on",
+  // "on" keeps only posts from people asking to hire a developer, freelancer or agency. See lib/client-intent.ts.
+  strict_clients: "on",
   // Google search: "YYYY-MM-DD:count" for the free daily allowance, and when posts were last searched.
   cse_quota: "",
   // Lead preferences, set by admins on the Preferences page.

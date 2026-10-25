@@ -47,7 +47,8 @@ export default async function PreferencesPage({ searchParams }: { searchParams: 
                 <Input id="pref_max_age_hours" name="pref_max_age_hours" type="number" min={1} max={720} defaultValue={s.pref_max_age_hours} required />
               </Field>
               <div className="space-y-3 sm:pt-7">
-                <Checkbox name="type_job" defaultChecked={s.pref_lead_types.includes("job")} label="Also keep job posts" hint="Companies hiring full time sometimes outsource." />
+                <Checkbox name="strict_clients" defaultChecked={s.strict_clients !== "off"} label="Only clients who will pay us" hint="Keep only posts asking for a developer, freelancer or agency. Drops job ads, developers selling, job seekers and tips posts." />
+                <Checkbox name="type_job" defaultChecked={s.pref_lead_types.includes("job")} label="Also keep job posts" hint="Ignored while the setting above is on." />
               </div>
             </div>
           </FormSection>

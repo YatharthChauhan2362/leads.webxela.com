@@ -20,6 +20,7 @@ function nav(newCount: number, member: Member | null, unread = 0, findCount = 0)
         items: [
           { href: "/", label: "Leads", count: newCount },
           { href: "/notifications", label: "Notifications", count: unread },
+          { href: "/search", label: "Search" },
           { href: "/extension", label: "Chrome extension" },
         ],
       },
@@ -112,7 +113,8 @@ export async function AppShell({ children, member }: { children: ReactNode; memb
   const count = newLeads.count ?? 0;
   const brand = await getBrand();
   // New daily finds in the last 24 hours, for the menu.
-  let findQuery = sb().from("leads").select("id", { count: "exact", head: true }).eq("is_lead", false).gte("captured_at", hoursAgo(24));
+  // Only finds worth a look: the same "hide cold" cut the Daily finds list starts with.
+  let findQuery = sb().from("leads").select("id", { count: "exact", head: true }).eq("is_lead", false).gte("score", 40).gte("captured_at", hoursAgo(24));
   if (member && !can(member, "admin")) findQuery = findQuery.or(`assigned_to.eq.${member.id},captured_by.eq.${member.id}`);
   const finds = (await findQuery).count ?? 0;
   const unread = member ? ((await sb().from("notifications").select("id", { count: "exact", head: true }).eq("member_id", member.id).is("read_at", null)).count ?? 0) : 0;

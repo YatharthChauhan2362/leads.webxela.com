@@ -3,6 +3,7 @@ import { z } from "zod";
 import { CORS, apiMember, checkKey, preflight } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
 import { PostIn, ProfileIn, ingestPosts, logRun, saveProfile } from "@/lib/ingest";
+import { getSetting } from "@/lib/db";
 
 const Body = z.object({
   posts: z.array(z.unknown()).max(200).default([]),
@@ -24,6 +25,9 @@ export async function POST(req: Request) {
     return r.success ? [r.data] : [];
   });
   const who = await apiMember(req);
+  // The Claude routine posts with its own member key. When an admin turned it off, ignore what it sends.
+  const claude = Boolean(who?.email.startsWith("claude-routine@"));
+  if (claude && (await getSetting("claude_auto")) === "off") return NextResponse.json({ found: 0, added: 0, profiles: 0, paused: true, message: "An admin turned the Claude routine off." }, { headers: CORS });
   let profiles = 0;
   for (const p of parsed.data.profiles) {
     const r = ProfileIn.safeParse(p);
@@ -35,6 +39,6 @@ export async function POST(req: Request) {
 
   const res = await ingestPosts(posts, { capturedBy: who?.id });
   if (res.added || profiles) await logActivity(who, "capture", { detail: `${res.added} new posts, ${profiles} profiles` });
-  if (posts.length) await logRun("extension", res.found, res.added);
+  if (posts.length || claude) await logRun(claude ? "claude" : "extension", res.found, res.added);
   return NextResponse.json({ ...res, profiles }, { headers: CORS });
 }

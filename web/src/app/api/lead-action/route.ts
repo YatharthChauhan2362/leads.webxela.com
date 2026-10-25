@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { CORS, apiMember, checkKey, preflight } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
-import { assignTo, pickBde } from "@/lib/assign";
+import { assignTo } from "@/lib/assign";
+import { can } from "@/lib/session";
+import { findDuplicates } from "@/lib/duplicates";
 import { must, sb } from "@/lib/db";
 import { cleanProfileUrl, getProfile, ingestPosts } from "@/lib/ingest";
 import { appUrl } from "@/lib/oauth";
@@ -26,19 +28,30 @@ export async function POST(req: Request) {
   const p = await getProfile(url);
 
   // Their latest lead, or a new one made from the profile.
-  let lead = must(await sb().from("leads").select("id, assigned_to").eq("author_url", url).order("captured_at", { ascending: false }).limit(1).maybeSingle()) as {
+  let lead = must(await sb().from("leads").select("id, assigned_to, captured_by, is_lead").eq("author_url", url).order("captured_at", { ascending: false }).limit(1).maybeSingle()) as {
     id: number;
     assigned_to: string | null;
+    captured_by: string | null;
+    is_lead: boolean;
   } | null;
+  // A member cannot touch a teammate's lead. Say who has it instead.
+  if (lead && lead.is_lead && me && !can(me, "admin") && lead.assigned_to !== me.id && !(lead.assigned_to === null && lead.captured_by === me.id)) {
+    const [d] = await findDuplicates({ authorUrl: url });
+    return NextResponse.json({ error: `Already a lead with ${d?.owner ?? "a teammate"}.` }, { headers: CORS });
+  }
+  // A daily find picked from the extension becomes yours.
+  if (lead && !lead.is_lead && me) must(await sb().from("leads").update({ captured_by: me.id }).eq("id", lead.id));
   if (!lead) {
     const text = [p?.headline, p?.company ? `Works at ${p.company}` : null, `Saved from LinkedIn profile: ${p?.name ?? url}`].filter(Boolean).join("\n\n");
     await ingestPosts([{ source: "linkedin", postId: `profile:${url}`, postUrl: url, author: p?.name ?? null, authorUrl: url, headline: p?.headline ?? null, text: text.padEnd(20, ".") }], {
       force: true,
       capturedBy: me?.id,
     });
-    lead = must(await sb().from("leads").select("id, assigned_to").eq("author_url", url).order("captured_at", { ascending: false }).limit(1).maybeSingle()) as {
+    lead = must(await sb().from("leads").select("id, assigned_to, captured_by, is_lead").eq("author_url", url).order("captured_at", { ascending: false }).limit(1).maybeSingle()) as {
       id: number;
       assigned_to: string | null;
+      captured_by: string | null;
+      is_lead: boolean;
     } | null;
   }
   if (!lead) return NextResponse.json({ error: "Could not save this person." }, { status: 500, headers: CORS });
@@ -46,14 +59,7 @@ export async function POST(req: Request) {
   // Anything done from the extension's menu makes this person a lead.
   must(await sb().from("leads").update({ is_lead: true }).eq("id", lead.id));
 
-  if (r.data.action === "bde") {
-    const bde = await pickBde();
-    if (!bde) return NextResponse.json({ error: "There are no BDEs yet. An admin sets someone's job to BDE on the Team page.", link }, { headers: CORS });
-    await assignTo(lead.id, bde.id);
-    await logActivity(me, "assign", { target: `lead ${lead.id}`, detail: `From extension, to BDE ${bde.email}` });
-    return NextResponse.json({ ok: true, message: `Saved and given to ${bde.name || bde.email}.`, link }, { headers: CORS });
-  }
-  if (r.data.action === "mine" && me) {
+  if ((r.data.action === "mine" || r.data.action === "bde") && me) {
     await assignTo(lead.id, me.id);
     await logActivity(me, "assign", { target: `lead ${lead.id}`, detail: "From extension, took it myself" });
     return NextResponse.json({ ok: true, message: "Saved and assigned to you.", link }, { headers: CORS });
