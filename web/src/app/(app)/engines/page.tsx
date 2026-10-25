@@ -34,7 +34,7 @@ export default async function EnginesPage({ searchParams }: { searchParams: Prom
     <>
       <PageHeader
         title="Search engines"
-        description="Google API keys and search engines. Add keys from as many Google accounts as you like: when one uses its 100 free searches for the day, the next one takes over."
+        description="Paste each Google search engine's ID and the Search page works straight away. API keys are optional: only add them if you also want the server to search on its own."
       />
       <Flash searchParams={searchParams} />
 
@@ -46,19 +46,18 @@ export default async function EnginesPage({ searchParams }: { searchParams: Prom
       </div>
 
       <Card className="mb-6">
-        <CardHeader title="How to add a Google account" />
+        <CardHeader title="How to add an engine" />
         <ol className="list-decimal space-y-1.5 pl-5 text-[15px]">
-          <li>Sign in to Google Cloud with the new account and create a project.</li>
-          <li>In APIs and services, open Library, find Custom Search API and press Enable.</li>
-          <li>Open Credentials, press Create credentials, then API key. Copy the key, it starts with AIza.</li>
-          <li>Add it below as a new key. It is tested before it is saved.</li>
-          <li>Engines can be made in any Google account. One API key works with every engine.</li>
+          <li>At programmablesearchengine.google.com, open your engine.</li>
+          <li>On Overview, under Basic, copy the Search engine ID.</li>
+          <li>Add it below with its kind. That is all the Search page needs, no key.</li>
+          <li>Optional: an API key lets the server also search on its own every hour. Without it, the hourly Claude routine and the extension find posts instead.</li>
         </ol>
       </Card>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <Card>
-          <CardHeader title="Add an API key" description="One per Google account. 100 free searches a day each." />
+          <CardHeader title="Add an API key (optional)" description="Only for automatic server searches. 100 free searches a day each; the next key takes over when one runs out." />
           <form action={addKey} className="space-y-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_1fr_140px]">
               <Field label="Name" htmlFor="k-label" hint="For example: team@ account">
