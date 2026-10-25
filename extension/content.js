@@ -34,7 +34,8 @@
     chrome.storage.local.get({ brand: null, capture: true }, (s) => {
       if (s.brand) BRAND = s.brand;
       enabled = s.capture;
-      schedule();
+      // Wait for the rest of this file to set up before the first scan.
+      setTimeout(schedule, 0);
     });
     chrome.storage.onChanged.addListener((c) => {
       if (c.brand?.newValue) BRAND = c.brand.newValue;
@@ -224,6 +225,7 @@
         found: true,
         ...readCompany(),
         location: readLocation(),
+        photo: readPhoto(),
       };
     }
     const startPath = location.pathname;
@@ -243,7 +245,7 @@
     await sleep(300);
     if (location.pathname !== startPath && /overlay\/contact-info/.test(location.pathname)) history.back();
     if (!data.found) return null;
-    Object.assign(data, readCompany(), { location: readLocation() });
+    Object.assign(data, readCompany(), { location: readLocation(), photo: readPhoto() });
     data.emails = [...new Set([...data.emails, ...fromPage.emails])];
     data.phones = [...new Set([...data.phones, ...fromPage.phones])];
     return data;
@@ -263,6 +265,14 @@
       company: (fromBtn || fromExp || fromHeadline || "").trim() || null,
       companyUrl: link ? abs(link.getAttribute("href")) : null,
     };
+  }
+
+  // Their profile photo from the top of the page, for the profile card.
+  function readPhoto() {
+    const img =
+      document.querySelector('main img.pv-top-card-profile-picture__image--show, main img.pv-top-card-profile-picture__image, main .pv-top-card__photo img, main img[class*="profile-picture"]') ||
+      [...document.querySelectorAll("main img")].find((i) => i.naturalWidth >= 80 && /^https:/.test(i.src) && !/background|banner/i.test(i.className));
+    return img && /^https:/.test(img.src) ? img.src : null;
   }
 
   function readLocation() {
@@ -302,7 +312,7 @@
     const key = `profile:${url}:${company}:${emails.join()}:${phones.join()}`;
     if (sent.has(key)) return null;
     sent.add(key);
-    return { url, name, headline, company, companyUrl, location: readLocation(), emails: [...new Set(emails)], phones: [...new Set(phones)], websites };
+    return { url, name, headline, company, companyUrl, location: readLocation(), photo: readPhoto(), emails: [...new Set(emails)], phones: [...new Set(phones)], websites };
   }
 
   function scan() {
@@ -449,7 +459,73 @@
     }
   }
 
+  // ---------- Profile card, like SignalHire: who they are, contacts, and actions ----------
+
+  const CARD_CSS = `
+    .card { position: fixed; right: 16px; top: 72px; z-index: 2147483000; width: 340px; max-height: calc(100vh - 96px); overflow: auto; background: #fff; border: 1px solid #e6e6e6; border-radius: 16px; box-shadow: 0 8px 24px rgba(0,0,0,.12); color: #171717; font-size: 14px; line-height: 1.45; }
+    .top { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border-bottom: 1px solid #eee; }
+    .brand { font-weight: 800; font-size: 16px; } .brand b { color: var(--b); }
+    .x { border: 0; background: none; font-size: 13px; color: #616161; height: 28px; padding: 0 6px; }
+    .band { background: var(--b); color: #fff; text-align: center; font-weight: 700; padding: 6px; font-size: 13px; letter-spacing: .02em; }
+    .who { display: flex; gap: 12px; padding: 14px; }
+    .who img, .who .ph { width: 64px; height: 64px; border-radius: 14px; object-fit: cover; flex-shrink: 0; background: #f2f2f2; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #616161; font-size: 20px; }
+    .nm { font-size: 17px; font-weight: 800; margin: 0; } .hl { font-weight: 600; margin: 2px 0; } .co { color: var(--b); font-weight: 600; text-decoration: none; display: block; } .lc { color: #616161; }
+    .links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .links a { font-size: 12px; font-weight: 600; border: 1px solid #e6e6e6; border-radius: 999px; padding: 2px 10px; color: #171717; text-decoration: none; }
+    .links a:hover { border-color: var(--b); color: var(--b); }
+    .sec { border-top: 1px solid #eee; padding: 12px 14px; }
+    .sec h4 { margin: 0 0 6px; font-size: 14px; }
+    .lbl { font-size: 12px; color: #616161; margin: 8px 0 2px; font-weight: 600; }
+    .row { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 3px 0; }
+    .row span { overflow-wrap: anywhere; font-weight: 500; }
+    .row small { display: block; color: #616161; font-size: 11px; font-weight: 400; }
+    .row button { height: 26px; padding: 0 8px; font-size: 12px; flex-shrink: 0; }
+    .none { color: #616161; }
+    .actions { padding: 12px 14px 14px; border-top: 1px solid #eee; }
+    .actions > button { width: 100%; height: 42px; }
+    .menu { display: none; margin-top: 8px; border: 1px solid #e6e6e6; border-radius: 12px; overflow: hidden; }
+    .menu.open { display: block; }
+    .menu button, .menu .fu { display: flex; width: 100%; border: 0; border-top: 1px solid #f0f0f0; border-radius: 0; height: 40px; justify-content: flex-start; padding: 0 12px; background: #fff; align-items: center; gap: 6px; }
+    .menu button:first-child { border-top: 0; }
+    .menu button:hover { background: var(--b); color: #fff; }
+    .menu .fu input { height: 30px; border: 1px solid #ddd; border-radius: 8px; padding: 0 6px; font: inherit; flex: 1; }
+    .menu .fu button { width: auto; height: 30px; border: 1px solid #e6e6e6; border-radius: 8px; }
+    .msg { margin-top: 8px; font-size: 13px; color: #616161; } .msg.err { color: #bf2121; }
+  `;
+
   let panelFor = null;
+
+  function contactRows(label, list, note) {
+    if (!list.length) return "";
+    return `<div class="lbl">${label}</div>` + list.map((v) => `<div class="row"><span>${esc(v)}${note ? `<small>${esc(note)}</small>` : ""}</span><button data-copy="${esc(v)}">Copy</button></div>`).join("");
+  }
+
+  function renderContacts(box, res) {
+    const c = res?.contacts;
+    const w = res?.workEmail;
+    if (!c && !w) {
+      box.innerHTML = `<div class="none">Not looked up yet. Press Find email and phone.</div>`;
+      return;
+    }
+    const WORD = { found: "Found", likely: "Likely", guess: "Guess" };
+    const work = [...(c?.work_emails || [])];
+    let html = "";
+    if (w && !work.includes(w.email)) html += contactRows(`Work email, ${WORD[w.status] || "Guess"} ${w.confidence ?? ""}%`, [w.email], w.note || "");
+    html += contactRows("Work email", work);
+    html += contactRows("Personal email", c?.personal_emails || []);
+    html += contactRows("Phone", c?.phones || []);
+    if (w?.alternatives?.length) html += `<div class="lbl">Other work email options</div><div class="none">${w.alternatives.map(esc).join(", ")}</div>`;
+    box.innerHTML = html || `<div class="none">No email or phone listed in public. Connect with them on LinkedIn, then look again.</div>`;
+    box.querySelectorAll("[data-copy]").forEach((b) =>
+      b.addEventListener("click", () => {
+        navigator.clipboard.writeText(b.dataset.copy);
+        safeSend({ type: "activity", action: "copy", detail: b.dataset.copy, path: location.href.split("?")[0] });
+        b.textContent = "Copied";
+        setTimeout(() => (b.textContent = "Copy"), 1200);
+      }),
+    );
+  }
+
   function addProfilePanel() {
     const m = location.pathname.match(/^\/in\/([^/]+)\/?$/);
     const old = document.getElementById("yatri-panel");
@@ -463,24 +539,104 @@
     panelFor = m[1];
     const url = `https://www.linkedin.com/in/${m[1]}/`;
     const name = clean(document.querySelector("main h1")?.innerText || "").split("\n")[0] || "This person";
+    const headline = clean(document.querySelector("main .text-body-medium")?.innerText || "");
+    const { company, companyUrl } = readCompany();
+    const loc = readLocation();
+    const photo = readPhoto();
+    const initials = name.split(/\s+/).slice(0, 2).map((p) => p[0] || "").join("").toUpperCase();
+    const today = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+
     const host = document.createElement("div");
     host.id = "yatri-panel";
     document.body.appendChild(host);
-    const root = mount(
-      host,
-      `<div class="panel"><button class="close" data-a="hide">Hide</button>
-        <h3>${esc(BRAND.first)} <b>${esc(BRAND.second)}</b></h3><div class="who">${esc(name)}</div>
-        <div class="btns"><button class="primary" data-a="find">Find email and phone</button>
-        <button data-a="posts">Show their recent posts</button></div>
-        <div class="out" style="margin-top:8px"></div></div>`,
-    );
-    const out = root.querySelector(".out");
-    root.querySelector('[data-a="hide"]').addEventListener("click", () => (root.querySelector(".panel").style.display = "none"));
-    root.querySelector('[data-a="posts"]').addEventListener("click", () => (location.href = url + "recent-activity/all/"));
-    root.querySelector('[data-a="find"]').addEventListener("click", (e) =>
-      busy(e.target, "Looking up...", async () => {
+    host.style.setProperty("--b", BRAND.color || "#0080FF");
+    const root = host.attachShadow({ mode: "open" });
+    root.innerHTML = `<style>${CSS}${CARD_CSS}</style>
+      <div class="card">
+        <div class="top"><span class="brand">${esc(BRAND.first)} <b>${esc(BRAND.second)}</b></span><button class="x" data-a="hide">Hide</button></div>
+        <div class="band">Profile</div>
+        <div class="who">
+          ${photo ? `<img src="${esc(photo)}" alt="">` : `<div class="ph">${esc(initials)}</div>`}
+          <div>
+            <p class="nm">${esc(name)}</p>
+            ${headline ? `<p class="hl">${esc(headline.slice(0, 120))}</p>` : ""}
+            ${company ? (companyUrl ? `<a class="co" href="${esc(companyUrl)}" target="_blank">${esc(company)}</a>` : `<span class="co">${esc(company)}</span>`) : ""}
+            ${loc ? `<span class="lc">${esc(loc)}</span>` : ""}
+            <div class="links" data-links><a href="${esc(url)}" target="_blank">LinkedIn</a></div>
+          </div>
+        </div>
+        <div class="sec">
+          <h4>Contact info</h4>
+          <div data-contacts><div class="none">Checking what we already know...</div></div>
+          <button class="primary" data-a="find" style="width:100%;height:40px;margin-top:10px">Find email and phone</button>
+        </div>
+        <div class="actions">
+          <button data-a="menu">Actions with profile</button>
+          <div class="menu" data-menu>
+            <button data-act="save">Save as lead</button>
+            <button data-act="mine">Save and take it myself</button>
+            <button data-act="bde">Save and give to a BDE</button>
+            <div class="fu"><span>Follow up on</span><input type="date" value="${today}" data-date><button data-act="follow_up">Set</button></div>
+            <button data-act="open">Open in the app</button>
+            <button data-act="copyall">Copy all contact details</button>
+          </div>
+          <div class="msg" data-msg></div>
+        </div>
+      </div>`;
+
+    const $ = (sel) => root.querySelector(sel);
+    const contacts = $("[data-contacts]");
+    const msg = $("[data-msg]");
+    let last = null;
+    let leadLink = null;
+    const show = (res) => {
+      last = res;
+      renderContacts(contacts, res);
+      const p = res?.person;
+      const links = $("[data-links]");
+      if (p?.github && !links.querySelector("[data-gh]")) links.insertAdjacentHTML("beforeend", `<a data-gh href="${esc(p.github)}" target="_blank">GitHub</a>`);
+      if (p?.website && !links.querySelector("[data-web]")) links.insertAdjacentHTML("beforeend", `<a data-web href="${esc(p.website)}" target="_blank">Website</a>`);
+    };
+    const say = (text, bad) => {
+      msg.textContent = text;
+      msg.className = bad ? "msg err" : "msg";
+    };
+
+    // Show what we already know straight away, then let them look up more.
+    safeSend({ type: "cached", url }, (r) => show(r && !r.error ? r : null));
+
+    $('[data-a="hide"]').addEventListener("click", () => (root.querySelector(".card").style.display = "none"));
+    $('[data-a="menu"]').addEventListener("click", () => $("[data-menu]").classList.toggle("open"));
+    $('[data-a="find"]').addEventListener("click", (e) =>
+      busy(e.target, "Looking up, about 10 seconds...", async () => {
         const profile = await findContactHere();
-        showContacts(out, await ask(profile ? { type: "lookup", profile } : { type: "lookup", url }));
+        const res = await ask(profile ? { type: "lookup", profile: { ...profile, photo: profile.photo || photo } } : { type: "lookup", url });
+        if (res?.error) return say(res.error, true);
+        show(res);
+        say(res?.contacts?.emails?.length || res?.contacts?.phones?.length ? "Found and saved to People." : res?.workEmail ? "Work email predicted from their company. Saved to People." : "Nothing public found. Saved to People.");
+      }),
+    );
+    root.querySelectorAll("[data-act]").forEach((b) =>
+      b.addEventListener("click", async () => {
+        const act = b.dataset.act;
+        if (act === "open") {
+          if (leadLink) return window.open(leadLink, "_blank");
+          const r = await ask({ type: "lead-action", action: "save", url });
+          leadLink = r?.link;
+          return leadLink ? window.open(leadLink, "_blank") : say(r?.error || "Could not open it.", true);
+        }
+        if (act === "copyall") {
+          const c = last?.contacts || {};
+          const lines = [name, headline, company, loc, url, ...(c.emails || []), ...(c.phones || []), last?.workEmail?.email].filter(Boolean);
+          navigator.clipboard.writeText([...new Set(lines)].join("\n"));
+          safeSend({ type: "activity", action: "copy", detail: `All details for ${name}`, path: url });
+          return say("Copied.");
+        }
+        b.disabled = true;
+        const r = await ask({ type: "lead-action", action: act, url, date: act === "follow_up" ? $("[data-date]").value : undefined });
+        b.disabled = false;
+        if (r?.link) leadLink = r.link;
+        say(r?.error || r?.message || "Done.", Boolean(r?.error));
       }),
     );
   }

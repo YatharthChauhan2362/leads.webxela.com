@@ -50,6 +50,16 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
       });
     return true;
   }
+  if (msg.type === "cached") {
+    api(`/api/lookup?url=${encodeURIComponent(msg.url)}`).then(reply).catch((e) => reply({ error: e.message }));
+    return true;
+  }
+  if (msg.type === "lead-action") {
+    api("/api/lead-action", { method: "POST", body: JSON.stringify({ action: msg.action, url: msg.url, date: msg.date }) })
+      .then(reply)
+      .catch((e) => reply({ error: e.message }));
+    return true;
+  }
   if (msg.type === "me") {
     refreshMe().then(reply);
     return true;
@@ -289,6 +299,7 @@ async function lookup({ url, post, profile: given }) {
   const body = {};
   if (profile)
     body.profile = {
+      photo: profile.photo || undefined,
       url: profile.url,
       name: profile.name,
       headline: profile.headline,

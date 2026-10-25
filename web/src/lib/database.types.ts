@@ -384,10 +384,12 @@ export type Database = {
           company_domain: string | null
           email_alternatives: string
           emails: string
+          github_url: string | null
           headline: string | null
           location: string | null
           name: string | null
           phones: string
+          photo_url: string | null
           updated_at: string
           url: string
           websites: string
@@ -401,10 +403,12 @@ export type Database = {
           company_domain?: string | null
           email_alternatives?: string
           emails?: string
+          github_url?: string | null
           headline?: string | null
           location?: string | null
           name?: string | null
           phones?: string
+          photo_url?: string | null
           updated_at?: string
           url: string
           websites?: string
@@ -418,10 +422,12 @@ export type Database = {
           company_domain?: string | null
           email_alternatives?: string
           emails?: string
+          github_url?: string | null
           headline?: string | null
           location?: string | null
           name?: string | null
           phones?: string
+          photo_url?: string | null
           updated_at?: string
           url?: string
           websites?: string
