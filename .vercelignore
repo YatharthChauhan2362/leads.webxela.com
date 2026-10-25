@@ -2,8 +2,8 @@
 !.env.example
 **/.env*
 !**/.env.example
-web/data
+/web/data
 **/node_modules
 **/.next
-extension
-PRODUCT_PROMPT.md
+/extension
+/PRODUCT_PROMPT.md
