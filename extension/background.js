@@ -125,6 +125,12 @@ function waitForLoad(tabId) {
   });
 }
 
+// A minimized window of its own, so nothing opens in the window you are using.
+async function openQuietly(url) {
+  const win = await chrome.windows.create({ url, state: "minimized", focused: false });
+  return { id: win.id, winId: win.id, tabId: win.tabs[0].id };
+}
+
 let watching = false;
 
 // Opens a few saved searches in one background tab, at a human pace, then closes it.
@@ -149,7 +155,8 @@ async function runWatch(manual) {
     const { urls } = await api("/api/searches");
     if (!urls.length) return { error: "No searches set up." };
     const count = Math.min(s.perRun, left, urls.length);
-    tab = await chrome.tabs.create({ url: "about:blank", active: false });
+    tab = await openQuietly("about:blank");
+    tab.id = tab.tabId;
 
     for (let i = 0; i < count; i++) {
       const url = urls[(s.cursor + i) % urls.length];
@@ -192,25 +199,26 @@ async function runWatch(manual) {
     await set({ lastError: e.message });
     return { error: e.message };
   } finally {
-    if (tab) chrome.tabs.remove(tab.id).catch(() => {});
+    if (tab) chrome.windows.remove(tab.winId).catch(() => {});
     watching = false;
   }
 }
 
 // Opens the person's Contact info in a background tab, reads it, closes the tab,
 // then asks the server to save it and check their website.
-async function lookup({ url, post }) {
-  let profile = null;
-  if (url) {
-    const tab = await chrome.tabs.create({ url: url.replace(/\/?$/, "/") + "overlay/contact-info/", active: false });
+async function lookup({ url, post, profile: given }) {
+  // The page already read the Contact info in place. Nothing to open.
+  let profile = given || null;
+  if (!profile && url) {
+    const win = await openQuietly(url.replace(/\/?$/, "/") + "overlay/contact-info/");
     try {
-      await waitForLoad(tab.id);
+      await waitForLoad(win.tabId);
       for (let i = 0; i < 10 && !profile; i++) {
-        profile = await chrome.tabs.sendMessage(tab.id, { type: "read-contact" }).catch(() => null);
+        profile = await chrome.tabs.sendMessage(win.tabId, { type: "read-contact" }).catch(() => null);
         if (!profile) await sleep(700);
       }
     } finally {
-      chrome.tabs.remove(tab.id).catch(() => {});
+      chrome.windows.remove(win.id).catch(() => {});
     }
     if (!profile) return { error: "LinkedIn did not open the Contact info. Are you signed in?" };
     profile.url = url;

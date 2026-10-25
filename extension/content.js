@@ -146,6 +146,31 @@
     };
   }
 
+  // Opens this profile's own Contact info box, reads it and closes it again, so you stay on the page.
+  async function findContactHere() {
+    const m = location.pathname.match(/^\/in\/([^/]+)/);
+    if (!m) return null;
+    const link = document.querySelector('#top-card-text-details-contact-info, a[href*="/overlay/contact-info"]');
+    if (!link) return null;
+    const startPath = location.pathname;
+    link.click();
+    let dialog = null;
+    for (let i = 0; i < 20; i++) {
+      dialog = document.querySelector('[role="dialog"]');
+      if (dialog && /contact info/i.test(dialog.innerText) && dialog.querySelector("section, a")) break;
+      await sleep(400);
+    }
+    await sleep(500);
+    const data = readContactDialog();
+    data.url = `https://www.linkedin.com/in/${m[1]}/`;
+    // Close the box the way you would: its close button, or Back if LinkedIn changed the address.
+    const close = dialog && dialog.querySelector('button[aria-label*="ismiss"], button[aria-label*="lose"]');
+    if (close) close.click();
+    await sleep(300);
+    if (location.pathname !== startPath && /overlay\/contact-info/.test(location.pathname)) history.back();
+    return data.found ? data : null;
+  }
+
   function readProfile() {
     const m = location.pathname.match(/^\/in\/([^/]+)/);
     if (!m) return null;
@@ -304,7 +329,11 @@
       );
       root.querySelector('[data-a="find"]')?.addEventListener("click", (e) =>
         busy(e.target, "Looking up...", async () => {
-          showContacts(out, await ask({ type: "lookup", url: post.authorUrl, post }));
+          // On the author's own profile, read it right here. Otherwise a minimized window does it.
+          const here = location.pathname.match(/^\/in\/([^/]+)/);
+          const same = here && post.authorUrl && post.authorUrl.toLowerCase().includes(`/in/${here[1].toLowerCase()}`);
+          const profile = same ? await findContactHere() : null;
+          showContacts(out, await ask(profile ? { type: "lookup", profile, post } : { type: "lookup", url: post.authorUrl, post }));
         }),
       );
     }
@@ -339,7 +368,10 @@
     root.querySelector('[data-a="hide"]').addEventListener("click", () => (root.querySelector(".panel").style.display = "none"));
     root.querySelector('[data-a="posts"]').addEventListener("click", () => (location.href = url + "recent-activity/all/"));
     root.querySelector('[data-a="find"]').addEventListener("click", (e) =>
-      busy(e.target, "Looking up...", async () => showContacts(out, await ask({ type: "lookup", url }))),
+      busy(e.target, "Looking up...", async () => {
+        const profile = await findContactHere();
+        showContacts(out, await ask(profile ? { type: "lookup", profile } : { type: "lookup", url }));
+      }),
     );
   }
 
@@ -366,6 +398,10 @@
   chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
     if (msg.type === "scan") {
       scan().then(reply);
+      return true;
+    }
+    if (msg.type === "find-here") {
+      findContactHere().then(reply);
       return true;
     }
     if (msg.type === "profile-info") {

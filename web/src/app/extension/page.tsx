@@ -4,7 +4,8 @@ import { Callout, Card, PageHeader } from "@/components/ui/layout";
 
 const STEPS = [
   { title: "Open the extensions page", body: "In Chrome, go to chrome://extensions and turn on Developer mode at the top right." },
-  { title: "Load the folder", body: "Press Load unpacked and pick the extension folder inside this project: lead-generation-auto-saas/extension." },
+  { title: "Download and unzip", body: "Press Download extension above and unzip the file. Keep the folder somewhere it will stay, like Documents." },
+  { title: "Load the folder", body: "Press Load unpacked and pick the unzipped yatri-leads-extension folder. To update later, download again, replace the folder and press Reload." },
   { title: "Pin it", body: "Pin Yatri Leads to the toolbar so you can see how many leads it found today." },
   { title: "Browse LinkedIn as usual", body: "Open your feed, a post search, or someone's activity page. Posts on screen are scored and the good ones land in your inbox." },
   { title: "Use the buttons", body: "Every post gets a bar with Find email and phone and Save lead. Every profile gets a small panel at the bottom right. Results show on the page with a Copy button." },
@@ -18,9 +19,14 @@ export default function ExtensionPage() {
         title="Chrome extension"
         description="It reads LinkedIn in the tab where you are already signed in, the same way Apollo's extension works."
         actions={
-          <Link href="/settings" className={buttonClass("secondary")}>
-            Edit searches
-          </Link>
+          <>
+            <a href="/yatri-leads-extension.zip" download className={buttonClass("primary")}>
+              Download extension
+            </a>
+            <Link href="/settings" className={buttonClass("secondary")}>
+              Edit searches
+            </Link>
+          </>
         }
       />
       <ol className="space-y-3">

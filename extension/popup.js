@@ -81,12 +81,15 @@ async function showPerson(tab) {
   return true;
 }
 
-$("find").onclick = () => {
+$("find").onclick = async () => {
   $("find").disabled = true;
   $("find").textContent = "Looking up...";
   $("p-error").textContent = "";
   $("p-status").textContent = "Reading their Contact info and website. This takes about 10 seconds.";
-  chrome.runtime.sendMessage({ type: "lookup", url: person.url }, (r) => {
+  // Read the Contact info on the page you are on. Only if that fails does the extension use a minimized window.
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const profile = await new Promise((res) => chrome.tabs.sendMessage(tab.id, { type: "find-here" }, (p) => res(chrome.runtime.lastError ? null : p)));
+  chrome.runtime.sendMessage(profile ? { type: "lookup", profile } : { type: "lookup", url: person.url }, (r) => {
     $("find").disabled = false;
     $("find").textContent = "Find email and phone again";
     if (!r || r.error) {
