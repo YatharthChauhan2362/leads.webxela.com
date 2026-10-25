@@ -9,7 +9,8 @@ function nav(newCount: number): NavGroup[] {
     {
       label: "Leads",
       items: [
-        { href: "/", label: "Inbox", count: newCount },
+        { href: "/", label: "Leads", count: newCount },
+        { href: "/people", label: "People" },
         { href: "/add", label: "Add a post" },
       ],
     },

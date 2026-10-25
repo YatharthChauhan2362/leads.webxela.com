@@ -40,7 +40,7 @@ export const DEFAULT_SETTINGS = {
   ].join("\n"),
   watched_profiles: "https://www.linkedin.com/in/dr-mohsen-tayyebi/",
   subreddits: "forhire\nslavelabour\nstartups\nSaaS\nentrepreneur",
-  min_score: "50",
+  min_score: "0",
   alert_score: "70",
 };
 

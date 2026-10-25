@@ -49,9 +49,22 @@ function itemRow(kind, value) {
     <span class="acts"><button class="secondary" data-copy="${esc(value)}">Copy</button><a class="btn secondary" href="${esc(href)}" target="_blank">${label}</a></span></div>`;
 }
 
-function renderContacts(c) {
+const WORD = { found: "Found", likely: "Likely", guess: "Guess" };
+
+function renderContacts(c, w) {
   const fill = (id, list, kind, empty) => ($(id).innerHTML = list.length ? list.map((v) => itemRow(kind, v)).join("") : `<p class="none">${empty}</p>`);
   fill("emails", c?.emails || [], "Email", c ? "None listed" : "Not found yet");
+  // Our predicted work email goes first, with how sure we are.
+  if (w && !(c?.emails || []).includes(w.email)) {
+    const label = `Work email, ${WORD[w.status] || "Guess"} ${w.confidence ?? ""}%`;
+    const none = $("emails").querySelector(".none");
+    if (none) none.remove();
+    $("emails").insertAdjacentHTML(
+      "afterbegin",
+      itemRow("Email", w.email).replace('<span class="k">Email</span>', `<span class="k">${esc(label)}</span>`) +
+        `<p class="muted" style="margin:2px 0 6px">${esc(w.note || "")}${w.alternatives?.length ? `. Other options: ${w.alternatives.map(esc).join(", ")}` : ""}</p>`,
+    );
+  }
   fill("phones", c?.phones || [], "Phone", c ? "None listed" : "Not found yet");
   const sites = c?.websites || [];
   $("sites-wrap").classList.toggle("hidden", !sites.length);
@@ -83,7 +96,7 @@ async function showPerson(tab) {
 
   try {
     const r = await api(`/api/lookup?url=${encodeURIComponent(person.url)}`);
-    renderContacts(r.contacts);
+    renderContacts(r.contacts, r.workEmail);
     if (r.checkedAt) $("p-status").textContent = `Looked up ${new Date(r.checkedAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}.`;
   } catch {
     $("p-error").textContent = "Yatri Leads app is not reachable. Start it with npm run dev.";
@@ -107,9 +120,13 @@ $("find").onclick = async () => {
       $("p-error").textContent = r?.error || "Lookup failed. Reload the LinkedIn tab and try again.";
       return;
     }
-    renderContacts(r.contacts);
+    renderContacts(r.contacts, r.workEmail);
     const n = (r.contacts?.emails.length || 0) + (r.contacts?.phones.length || 0);
-    $("p-status").textContent = n ? "Found. Saved to all their leads." : "Nothing listed. LinkedIn shows email mostly to your connections. Connect with them, then look again.";
+    $("p-status").textContent = n
+      ? "Found. Saved to People and to all their leads."
+      : r.workEmail
+        ? "No public email, so we predicted their work email from their company. Saved to People."
+        : "Nothing listed, and we could not find their company's email domain. Saved to People.";
   });
 };
 

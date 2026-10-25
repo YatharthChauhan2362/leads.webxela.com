@@ -6,6 +6,7 @@ import { extractEmails, extractPhones, mergeList } from "./contacts";
 import { scorePost } from "./score";
 import { sendLeadEmail } from "./alerts";
 import { contactsFromWebsites } from "./website";
+import { companyFromHeadline, predictWorkEmail, type Prediction } from "./email-finder";
 
 export const PostIn = z.object({
   source: z.string().min(1).max(40),
@@ -23,6 +24,10 @@ export const ProfileIn = z.object({
   url: z.string().min(10).max(1000),
   name: z.string().max(300).nullish(),
   headline: z.string().max(1000).nullish(),
+  company: z.string().max(300).nullish(),
+  companyUrl: z.string().max(1000).nullish(),
+  companyWebsite: z.string().max(1000).nullish(),
+  location: z.string().max(300).nullish(),
   emails: z.array(z.string().max(300)).max(20).default([]),
   phones: z.array(z.string().max(60)).max(20).default([]),
   websites: z.array(z.string().max(1000)).max(20).default([]),
@@ -72,11 +77,20 @@ export async function ingestPosts(posts: PostIn[], opts: { force?: boolean } = {
     const profile = authorUrl ? await getProfile(authorUrl) : null;
     const note = emails.length || phones.length ? "Written in the post" : profile && (profile.emails || profile.phones) ? "From their profile contact info" : null;
 
+    // Predict a work email from the company in their headline ("Founder @ Acme").
+    let guess: Prediction | null = null;
+    if (p.source === "linkedin" && !emails.length) {
+      guess = await predictWorkEmail({ name: p.author, company: companyFromHeadline(p.headline), knownEmails: [] }).catch(() => null);
+    }
+
     const rows = must(
       await sb()
         .from("leads")
         .upsert(
           {
+            work_email: profile?.work_email ?? guess?.email ?? null,
+            work_email_status: (profile?.work_email_status ?? guess?.status ?? null) as Lead["work_email_status"],
+            work_email_confidence: profile?.work_email_confidence ?? guess?.confidence ?? null,
             source: p.source,
             post_key: key,
             post_url: p.postUrl ?? null,
@@ -135,6 +149,13 @@ export async function saveProfile(p: ProfileIn) {
     if (siteEmails.length || sitePhones.length) note ??= "From their website";
   }
 
+  // Predict their work email from their company (our own Apollo style finder).
+  const company = p.company ?? old?.company ?? companyFromHeadline(p.headline ?? old?.headline);
+  const known = [...new Set([...(old?.emails ? old.emails.split(", ") : []), ...emails, ...siteEmails])];
+  const guess = await predictWorkEmail({ name: p.name ?? old?.name, company, companyWebsite: p.companyWebsite, companyLinkedin: p.companyUrl, knownEmails: known }).catch(
+    () => null,
+  );
+
   const prof = must(
     await sb()
       .from("profiles")
@@ -142,6 +163,13 @@ export async function saveProfile(p: ProfileIn) {
         url,
         name: p.name ?? old?.name ?? null,
         headline: p.headline ?? old?.headline ?? null,
+        company: company ?? null,
+        location: p.location ?? old?.location ?? null,
+        company_domain: guess?.domain ?? old?.company_domain ?? null,
+        work_email: guess?.email ?? old?.work_email ?? null,
+        work_email_status: guess?.status ?? old?.work_email_status ?? null,
+        work_email_confidence: guess?.confidence ?? old?.work_email_confidence ?? null,
+        email_alternatives: guess ? guess.alternatives.join(", ") : (old?.email_alternatives ?? ""),
         emails: mergeList(old?.emails ?? "", [...emails, ...siteEmails]),
         phones: mergeList(old?.phones ?? "", [...phones, ...sitePhones]),
         websites,
@@ -164,10 +192,14 @@ export async function saveProfile(p: ProfileIn) {
           contact_note: l.contact_note ?? note,
           websites: prof.websites,
           contact_checked_at: now,
+          work_email: prof.work_email,
+          work_email_status: prof.work_email_status as Lead["work_email_status"],
+          work_email_confidence: prof.work_email_confidence,
         })
         .eq("id", l.id),
     );
   }
+  return { profile: prof, prediction: guess, leads: leads.length };
 }
 
 export async function logRun(kind: string, found: number, added: number, error?: string) {

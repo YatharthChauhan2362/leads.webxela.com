@@ -39,6 +39,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      companies: {
+        Row: {
+          domain: string | null
+          has_mx: boolean | null
+          linkedin_url: string | null
+          name: string
+          name_key: string
+          pattern: string | null
+          pattern_examples: number
+          updated_at: string
+        }
+        Insert: {
+          domain?: string | null
+          has_mx?: boolean | null
+          linkedin_url?: string | null
+          name: string
+          name_key: string
+          pattern?: string | null
+          pattern_examples?: number
+          updated_at?: string
+        }
+        Update: {
+          domain?: string | null
+          has_mx?: boolean | null
+          linkedin_url?: string | null
+          name?: string
+          name_key?: string
+          pattern?: string | null
+          pattern_examples?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       leads: {
         Row: {
           alerted: boolean
@@ -67,6 +100,9 @@ export type Database = {
           text: string
           urgency: string | null
           websites: string
+          work_email: string | null
+          work_email_confidence: number | null
+          work_email_status: string | null
         }
         Insert: {
           alerted?: boolean
@@ -95,6 +131,9 @@ export type Database = {
           text: string
           urgency?: string | null
           websites?: string
+          work_email?: string | null
+          work_email_confidence?: number | null
+          work_email_status?: string | null
         }
         Update: {
           alerted?: boolean
@@ -123,36 +162,60 @@ export type Database = {
           text?: string
           urgency?: string | null
           websites?: string
+          work_email?: string | null
+          work_email_confidence?: number | null
+          work_email_status?: string | null
         }
         Relationships: []
       }
       profiles: {
         Row: {
+          company: string | null
+          company_domain: string | null
+          email_alternatives: string
           emails: string
           headline: string | null
+          location: string | null
           name: string | null
           phones: string
           updated_at: string
           url: string
           websites: string
+          work_email: string | null
+          work_email_confidence: number | null
+          work_email_status: string | null
         }
         Insert: {
+          company?: string | null
+          company_domain?: string | null
+          email_alternatives?: string
           emails?: string
           headline?: string | null
+          location?: string | null
           name?: string | null
           phones?: string
           updated_at?: string
           url: string
           websites?: string
+          work_email?: string | null
+          work_email_confidence?: number | null
+          work_email_status?: string | null
         }
         Update: {
+          company?: string | null
+          company_domain?: string | null
+          email_alternatives?: string
           emails?: string
           headline?: string | null
+          location?: string | null
           name?: string | null
           phones?: string
           updated_at?: string
           url?: string
           websites?: string
+          work_email?: string | null
+          work_email_confidence?: number | null
+          work_email_status?: string | null
         }
         Relationships: []
       }

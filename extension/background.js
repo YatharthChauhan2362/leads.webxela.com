@@ -224,7 +224,18 @@ async function lookup({ url, post, profile: given }) {
     profile.url = url;
   }
   const body = {};
-  if (profile) body.profile = { url: profile.url, name: profile.name, headline: profile.headline, emails: profile.emails, phones: profile.phones, websites: profile.websites };
+  if (profile)
+    body.profile = {
+      url: profile.url,
+      name: profile.name,
+      headline: profile.headline,
+      company: profile.company,
+      companyUrl: profile.companyUrl,
+      location: profile.location,
+      emails: profile.emails,
+      phones: profile.phones,
+      websites: profile.websites,
+    };
   if (post) body.post = post;
   const r = await api("/api/lookup", { method: "POST", body: JSON.stringify(body) });
   if (r.saved) await bump({ added: 1 });

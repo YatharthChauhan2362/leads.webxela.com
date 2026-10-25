@@ -179,6 +179,8 @@
         phones: fromPage.phones,
         websites: [],
         found: true,
+        ...readCompany(),
+        location: readLocation(),
       };
     }
     const startPath = location.pathname;
@@ -198,9 +200,31 @@
     await sleep(300);
     if (location.pathname !== startPath && /overlay\/contact-info/.test(location.pathname)) history.back();
     if (!data.found) return null;
+    Object.assign(data, readCompany(), { location: readLocation() });
     data.emails = [...new Set([...data.emails, ...fromPage.emails])];
     data.phones = [...new Set([...data.phones, ...fromPage.phones])];
     return data;
+  }
+
+  // Current company: the top card button, else the first job in Experience, else "@ Company" in the headline.
+  function readCompany() {
+    const btn = document.querySelector('main [aria-label^="Current company"]');
+    const fromBtn = btn && (btn.getAttribute("aria-label").match(/Current company:\s*(.+?)(?:\.\s*Click|$)/i) || [])[1];
+    const exp = document.querySelector("#experience")?.closest("section");
+    const link = exp && exp.querySelector('a[href*="/company/"]');
+    const logo = link && link.querySelector("img[alt]");
+    const fromExp = logo ? logo.getAttribute("alt").replace(/\s*logo$/i, "") : null;
+    const headline = clean(document.querySelector("main .text-body-medium")?.innerText || "");
+    const fromHeadline = (headline.match(/(?:@|\bat\b)\s+([A-Z0-9][^|,•·\n@]{1,60})/) || [])[1];
+    return {
+      company: (fromBtn || fromExp || fromHeadline || "").trim() || null,
+      companyUrl: link ? abs(link.getAttribute("href")) : null,
+    };
+  }
+
+  function readLocation() {
+    const el = document.querySelector("main .text-body-small.inline, main span.text-body-small.inline.t-black--light");
+    return clean(el?.innerText || "") || null;
   }
 
   function readProfile() {
@@ -209,6 +233,8 @@
     const url = `https://www.linkedin.com/in/${m[1]}/`;
     const name = clean(document.querySelector("main h1")?.innerText || "").split("\n")[0] || null;
     const headline = clean(document.querySelector("main .text-body-medium")?.innerText || "") || null;
+    const { company, companyUrl } = readCompany();
+    const fromPage = contactsInPageText();
 
     // The Contact info window opens at /in/<slug>/overlay/contact-info/.
     const dialog = document.querySelector('[role="dialog"]');
@@ -226,11 +252,14 @@
         if (/website/i.test(head)) sec.querySelectorAll("a[href^='http']").forEach((a) => websites.push(a.href));
       });
     }
+    emails.push(...fromPage.emails);
+    phones.push(...fromPage.phones);
     if (!name && !emails.length && !phones.length) return null;
-    const key = `profile:${url}:${emails.join()}:${phones.join()}`;
+    // Every profile you open is saved once per visit, with whatever it shows.
+    const key = `profile:${url}:${company}:${emails.join()}:${phones.join()}`;
     if (sent.has(key)) return null;
     sent.add(key);
-    return { url, name, headline, emails, phones, websites };
+    return { url, name, headline, company, companyUrl, location: readLocation(), emails: [...new Set(emails)], phones: [...new Set(phones)], websites };
   }
 
   function scan() {
@@ -302,14 +331,18 @@
       return;
     }
     const c = res.contacts || { emails: [], phones: [], websites: [] };
+    const w = res.workEmail;
+    const WORD = { found: "Found", likely: "Likely", guess: "Guess" };
     const rows = [
+      ...(w && !c.emails.includes(w.email) ? [[`Work email, ${WORD[w.status] || "Guess"} ${w.confidence ?? ""}%`, w.email]] : []),
       ...c.emails.map((v) => ["Email", v]),
       ...c.phones.map((v) => ["Phone", v]),
       ...c.websites.slice(0, 2).map((v) => ["Website", v]),
     ];
     out.innerHTML = rows.length
       ? rows.map(([k, v]) => `<div class="row"><span><small>${k}</small>${esc(v)}</span><button data-copy="${esc(v)}">Copy</button></div>`).join("") +
-        (c.emails.length || c.phones.length ? "" : `<div class="muted">No email or phone listed. Connect with them, then look again.</div>`)
+        (w && w.note ? `<div class="muted">${esc(w.note)}${w.alternatives?.length ? `. Other options: ${w.alternatives.map(esc).join(", ")}` : ""}</div>` : "") +
+        (c.emails.length || c.phones.length || w ? "" : `<div class="muted">No email or phone listed. Connect with them, then look again.</div>`)
       : `<div class="muted">Nothing listed. LinkedIn shows email mostly to your connections.</div>`;
     out.querySelectorAll("[data-copy]").forEach((b) =>
       b.addEventListener("click", () => {

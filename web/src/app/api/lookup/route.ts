@@ -1,7 +1,26 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { CORS, checkKey, preflight } from "@/lib/api";
+import type { Profile } from "@/lib/db";
 import { PostIn, ProfileIn, cleanProfileUrl, getProfile, ingestPosts, saveProfile } from "@/lib/ingest";
+
+const split = (s: string | null | undefined) => (s ? s.split(", ").filter(Boolean) : []);
+
+function toContacts(p: Profile) {
+  return { emails: split(p.emails), phones: split(p.phones), websites: split(p.websites) };
+}
+
+function workEmailOf(p: Profile) {
+  if (!p.work_email) return null;
+  return {
+    email: p.work_email,
+    status: p.work_email_status,
+    confidence: p.work_email_confidence,
+    domain: p.company_domain,
+    alternatives: split(p.email_alternatives),
+    note: p.company ? `Works at ${p.company}` : "",
+  };
+}
 
 const Body = z.object({ profile: ProfileIn.optional(), post: PostIn.optional() });
 
@@ -19,16 +38,13 @@ export async function POST(req: Request) {
   if (post) saved = (await ingestPosts([post], { force: true })).added;
 
   let contacts = null;
+  let workEmail = null;
   if (profile) {
-    await saveProfile(profile);
-    const p = await getProfile(cleanProfileUrl(profile.url)!);
-    contacts = {
-      emails: p?.emails ? p.emails.split(", ") : [],
-      phones: p?.phones ? p.phones.split(", ") : [],
-      websites: p?.websites ? p.websites.split(", ") : [],
-    };
+    const r = await saveProfile(profile);
+    contacts = toContacts(r.profile);
+    workEmail = r.prediction ? { ...r.prediction, alternatives: r.prediction.alternatives } : workEmailOf(r.profile);
   }
-  return NextResponse.json({ saved, contacts }, { headers: CORS });
+  return NextResponse.json({ saved, contacts, workEmail }, { headers: CORS });
 }
 
 /** Contact details already found for one LinkedIn profile, so the popup can show them at once. */
@@ -38,8 +54,5 @@ export async function GET(req: Request) {
   const url = cleanProfileUrl(new URL(req.url).searchParams.get("url"));
   if (!url) return NextResponse.json({ error: "Send ?url=" }, { status: 400, headers: CORS });
   const p = await getProfile(url);
-  const contacts = p
-    ? { emails: p.emails ? p.emails.split(", ") : [], phones: p.phones ? p.phones.split(", ") : [], websites: p.websites ? p.websites.split(", ") : [] }
-    : null;
-  return NextResponse.json({ contacts, checkedAt: p?.updated_at ?? null }, { headers: CORS });
+  return NextResponse.json({ contacts: p ? toContacts(p) : null, workEmail: p ? workEmailOf(p) : null, checkedAt: p?.updated_at ?? null }, { headers: CORS });
 }
