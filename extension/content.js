@@ -7,18 +7,42 @@
   window.__yatriLeadsLoaded = true;
   const sent = new Set();
   let enabled = true;
+
+  // After the extension is reloaded or updated, this old copy stays in open tabs with no extension behind it.
+  // Then every chrome.* call throws "Extension context invalidated". Detect that and switch off quietly.
+  const alive = () => {
+    try {
+      return Boolean(chrome.runtime && chrome.runtime.id);
+    } catch {
+      return false;
+    }
+  };
+  const safeSend = (msg, cb) => {
+    if (!alive()) return cb && cb(undefined, true);
+    try {
+      chrome.runtime.sendMessage(msg, (r) => {
+        const failed = Boolean(chrome.runtime.lastError);
+        cb && cb(failed ? undefined : r, failed);
+      });
+    } catch {
+      cb && cb(undefined, true);
+    }
+  };
   // The app's name and colour, so the buttons on LinkedIn match it.
   let BRAND = { first: "Yatri", second: "Leads", color: "#0080FF" };
-  chrome.storage.local.get({ brand: null }, (s) => s.brand && (BRAND = s.brand));
-  chrome.storage.onChanged.addListener((c) => c.brand?.newValue && (BRAND = c.brand.newValue));
-
-  chrome.storage.local.get({ capture: true }, (s) => {
-    enabled = s.capture;
-    schedule();
-  });
-  chrome.storage.onChanged.addListener((c) => {
-    if (c.capture) enabled = c.capture.newValue;
-  });
+  try {
+    chrome.storage.local.get({ brand: null, capture: true }, (s) => {
+      if (s.brand) BRAND = s.brand;
+      enabled = s.capture;
+      schedule();
+    });
+    chrome.storage.onChanged.addListener((c) => {
+      if (c.brand?.newValue) BRAND = c.brand.newValue;
+      if (c.capture) enabled = c.capture.newValue;
+    });
+  } catch {
+    return;
+  }
 
   const clean = (s) => (s || "").replace(/ /g, " ").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
   const firstText = (root, sels) => {
@@ -295,8 +319,8 @@
     const profiles = profile ? [profile] : [];
     if (!posts.length && !profiles.length) return Promise.resolve({ posts: 0 });
     return new Promise((resolve) => {
-      chrome.runtime.sendMessage({ type: "ingest", posts, profiles }, (res) => {
-        if (chrome.runtime.lastError) {
+      safeSend({ type: "ingest", posts, profiles }, (res, failed) => {
+        if (failed) {
           // The extension was reloaded; let these be sent again next time.
           posts.forEach((p) => sent.delete(p.postId));
           return resolve({ posts: 0 });
@@ -367,7 +391,7 @@
     out.querySelectorAll("[data-copy]").forEach((b) =>
       b.addEventListener("click", () => {
         navigator.clipboard.writeText(b.dataset.copy);
-        chrome.runtime.sendMessage({ type: "activity", action: "copy", detail: b.dataset.copy, path: location.href.split("?")[0] });
+        safeSend({ type: "activity", action: "copy", detail: b.dataset.copy, path: location.href.split("?")[0] });
         b.textContent = "Copied";
         setTimeout(() => (b.textContent = "Copy"), 1200);
       }),
@@ -376,7 +400,7 @@
 
   function ask(msg) {
     return new Promise((resolve) => {
-      chrome.runtime.sendMessage(msg, (r) => resolve(chrome.runtime.lastError ? { error: "Reload this LinkedIn tab once, then try again." } : r));
+      safeSend(msg, (r, failed) => resolve(failed ? { error: "The extension was updated. Reload this LinkedIn tab once, then try again." } : r));
     });
   }
 
@@ -469,14 +493,25 @@
   }
 
   let timer = null;
+  const observer = new MutationObserver(() => schedule());
   function schedule() {
     clearTimeout(timer);
+    if (!alive()) {
+      // Old copy left behind by an extension update: stop watching the page.
+      observer.disconnect();
+      window.removeEventListener("scroll", schedule);
+      return;
+    }
     timer = setTimeout(() => {
-      decorate();
-      scan();
+      try {
+        decorate();
+        scan();
+      } catch (err) {
+        console.warn("[leads extension]", err.message);
+      }
     }, 1500);
   }
-  new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener("scroll", schedule, { passive: true });
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

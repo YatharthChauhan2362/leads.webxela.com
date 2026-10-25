@@ -128,3 +128,31 @@ export async function findProfile(name: string, company?: string | null): Promis
   const items = await search("profiles", `"${name}"${company ? ` "${company}"` : ""}`);
   return items.find((it) => /linkedin\.com\/in\//.test(it.link))?.link.split("?")[0] ?? null;
 }
+
+export type SearchHit = { title: string; link: string; snippet: string; image: string | null; emails: string[]; phones: string[] };
+
+/** Search page: one search on one engine, shown with our own screens. Uses one of today's free searches. */
+export async function searchEngine(engine: Engine, q: string, page = 1): Promise<{ hits: SearchHit[]; used: boolean; enabled: boolean }> {
+  if (!searchEnabled(engine)) return { hits: [], used: false, enabled: false };
+  const items = await search(engine, q, { start: String((page - 1) * 10 + 1) });
+  return {
+    enabled: true,
+    used: true,
+    hits: items.map((it) => {
+      const meta = it.pagemap?.metatags?.[0] ?? {};
+      const text = `${it.title}\n${it.snippet ?? ""}\n${meta["og:description"] ?? ""}`;
+      return {
+        title: it.title,
+        link: it.link,
+        snippet: (meta["og:description"] || it.snippet || "").slice(0, 400),
+        image: meta["og:image"] ?? null,
+        emails: extractEmails(text).slice(0, 3),
+        phones: extractPhones(text).filter((p) => p.startsWith("+")).slice(0, 2),
+      };
+    }),
+  };
+}
+
+export function engineReady(e: Engine) {
+  return searchEnabled(e);
+}

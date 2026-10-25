@@ -172,6 +172,7 @@ async function start() {
   $("capture").checked = s.capture;
   $("watch").checked = s.watch;
   renderGeneral(s);
+  $("schedule").textContent = `Set by your admin: every ${s.every} minutes, up to ${s.dailyCap} LinkedIn pages a day.`;
 
   // Step 1: are we connected to the app with a valid key?
   const me = await ask({ type: "me" });

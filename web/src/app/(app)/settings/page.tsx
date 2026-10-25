@@ -1,6 +1,6 @@
 import { rescoreAll, saveBranding, saveSettings } from "@/app/actions";
 import { Flash } from "@/components/ui/flash";
-import { Checkbox, Field, FormSection, Input, Textarea } from "@/components/ui/form";
+import { Field, Input, Textarea } from "@/components/ui/form";
 import { Callout, Card, CardHeader, PageHeader } from "@/components/ui/layout";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { aiEnabled } from "@/lib/ai";
@@ -16,7 +16,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const settings = await getSettings();
   return (
     <>
-      <PageHeader title="Searches and alerts" description="What to look for, where to look, and when to tell you." />
+      <PageHeader title="Searches and branding" description="The team's search phrases and watched profiles, plus your app's name, colour and logo." />
       <Flash searchParams={searchParams} />
 
       <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -78,25 +78,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 <Textarea id="subreddits" name="subreddits" defaultValue={settings.subreddits} className="min-h-72" />
               </Field>
             </div>
-            <FormSection title="Scores">
-              <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
-                <Field label="Keep posts scoring at least" htmlFor="min_score" hint="Posts that match a search phrase are always kept. 40 skips cold posts that match nothing.">
-                  <Input id="min_score" name="min_score" type="number" min={0} max={100} defaultValue={settings.min_score} required />
-                </Field>
-                <Field label="Alert me at" htmlFor="alert_score" hint="Posts at or above this are emailed to you.">
-                  <Input id="alert_score" name="alert_score" type="number" min={0} max={100} defaultValue={settings.alert_score} required />
-                </Field>
-                <div className="sm:col-span-2 lg:pt-7">
-                  <Checkbox
-                    name="auto_assign"
-                    value="on"
-                    defaultChecked={settings.auto_assign === "on"}
-                    label="Give hot leads to BDEs automatically"
-                    hint="Each new lead at or above the alert score goes to the BDE with the fewest open leads."
-                  />
-                </div>
-              </div>
-            </FormSection>
+            <p className="text-[13px] text-muted-foreground">Scores, sources, schedules and hand off are on the Preferences page.</p>
             <SubmitButton>Save settings</SubmitButton>
           </form>
         </Card>

@@ -46,6 +46,23 @@ export const DEFAULT_SETTINGS = {
   auto_assign: "off",
   // Google search: "YYYY-MM-DD:count" for the free daily allowance, and when posts were last searched.
   cse_quota: "",
+  // Lead preferences, set by admins on the Preferences page.
+  pref_services: "website\nweb app\nmobile app\nshopify\nwordpress\nsaas\nmvp\nai\nchatbot\nautomation\ncloud\ndevops",
+  pref_exclude: "open to work\nlooking for a job\ninternship\nunpaid\nequity only\nrevenue share\nhire me\nwe are hiring interns",
+  pref_locations: "",
+  pref_lead_types: "project,job",
+  pref_max_age_hours: "72",
+  // How often things run. Only admins can change these, members and extensions follow them.
+  fetch_minutes: "60",
+  ext_minutes: "30",
+  ext_daily_cap: "80",
+  src_google: "on",
+  src_reddit: "on",
+  src_hn: "on",
+  digest_hour: "9",
+  notify_hot: "on",
+  last_server_run: "0",
+  last_digest: "",
   cse_last_posts: "0",
   // Branding, set by admins on Searches and alerts.
   brand_first: "Yatri",

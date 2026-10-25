@@ -6,6 +6,7 @@ import { extractEmails, extractPhones, mergeList } from "./contacts";
 import { scorePost } from "./score";
 import { sendLeadEmail } from "./alerts";
 import { assignTo, pickBde } from "./assign";
+import { notifyHotLead } from "./notify";
 import { contactsFromWebsites } from "./website";
 import { companyFromHeadline, predictWorkEmail, type Prediction } from "./email-finder";
 
@@ -87,7 +88,23 @@ export async function ingestPosts(posts: PostIn[], opts: { force?: boolean; capt
     known.add(key);
     const authorUrl = p.source === "linkedin" ? cleanProfileUrl(p.authorUrl) : (p.authorUrl ?? null);
     const s = await scorePost(p.text, p.author, p.headline);
+    // The admin's preferences: words that rule a post out, lead types we want, services and places we serve.
+    const lowerText = `${p.text}\n${p.headline ?? ""}`.toLowerCase();
+    if (!opts.force && lines(settings.pref_exclude).some((w) => lowerText.includes(w.toLowerCase()))) continue;
+    const types = settings.pref_lead_types.split(",").map((t) => t.trim());
+    if (!opts.force && s.intent === "selling") continue;
+    if (!opts.force && s.intent === "job" && !types.includes("job")) continue;
+    const services = lines(settings.pref_services).filter((w) => lowerText.includes(w.toLowerCase()));
+    if (services.length) {
+      s.score = Math.min(100, s.score + 10);
+      s.skills = [...new Set([...s.skills, ...services])];
+    }
+    if (lines(settings.pref_locations).some((l) => lowerText.includes(l.toLowerCase()))) s.score = Math.min(100, s.score + 10);
+
     // Keep a post only if it matches a search phrase, scores at least the minimum, or was saved by hand.
+    // Too old to chase, when we know the post date.
+    const maxAge = (Number(settings.pref_max_age_hours) || 72) * 3600_000;
+    if (!opts.force && p.postedAt && /^\d{4}-\d{2}-\d{2}/.test(p.postedAt) && Date.now() - Date.parse(p.postedAt) > maxAge) continue;
     const matched = matchPhrase(p.text, phrases);
     // Matching one of your searches is a strong sign, so it counts toward the score.
     if (matched) s.score = Math.min(100, s.score + 20);
@@ -173,6 +190,9 @@ export async function ingestPosts(posts: PostIn[], opts: { force?: boolean; capt
       if (!bde) break;
       await assignTo(l.id, bde.id);
     }
+  }
+  if (hot.length && settings.notify_hot === "on") {
+    for (const l of hot) await notifyHotLead({ ...l, assigned_to: l.assigned_to }).catch(() => {});
   }
   if (hot.length && (await sendLeadEmail(hot))) {
     must(await sb().from("leads").update({ alerted: true }).in("id", hot.map((l) => l.id)));

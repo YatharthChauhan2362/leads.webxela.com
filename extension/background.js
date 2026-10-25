@@ -82,6 +82,14 @@ async function refreshMe() {
   try {
     const r = await api("/api/me");
     await set({ me: r.member, brand: r.brand, connected: true, connectError: "" });
+    // The admin's schedule from Preferences. Members cannot change it here.
+    if (r.schedule) {
+      const s = await get(DEFAULTS);
+      if (s.every !== r.schedule.minutes || s.dailyCap !== r.schedule.dailyCap) {
+        await set({ every: r.schedule.minutes, dailyCap: r.schedule.dailyCap });
+        if (s.watch) chrome.alarms.create("watch", { periodInMinutes: Math.max(15, r.schedule.minutes), delayInMinutes: 1 });
+      }
+    }
     return { connected: true, ...r };
   } catch (e) {
     const msg = /401/.test(e.message) ? "That key is not right. Copy it again from the app." : "Cannot reach the app. Check the App address.";
@@ -96,6 +104,7 @@ async function setupAlarm() {
   await chrome.alarms.clear("watch");
   if (s.watch) chrome.alarms.create("watch", { periodInMinutes: Math.max(15, Number(s.every) || 30), delayInMinutes: 1 });
   chrome.alarms.create("heartbeat", { periodInMinutes: 5, delayInMinutes: 0.1 });
+  chrome.alarms.create("notify", { periodInMinutes: 1, delayInMinutes: 0.2 });
   heartbeat();
 }
 
@@ -104,6 +113,32 @@ chrome.runtime.onStartup.addListener(setupAlarm);
 chrome.alarms.onAlarm.addListener((a) => {
   if (a.name === "watch") runWatch(false);
   if (a.name === "heartbeat") heartbeat();
+  if (a.name === "notify") pullNotifications();
+});
+
+// Desktop alerts for hot leads, leads given to you and follow ups, within a minute of them happening.
+async function pullNotifications() {
+  try {
+    const { connected } = await get({ connected: false });
+    if (!connected) return;
+    const { items } = await api("/api/notifications");
+    const links = (await get({ notifyLinks: {} })).notifyLinks;
+    for (const n of items) {
+      const id = `lead-${n.id}`;
+      links[id] = n.url;
+      chrome.notifications.create(id, { type: "basic", iconUrl: "icon128.png", title: n.title, message: n.body || "Open to see the lead.", priority: 2 });
+    }
+    // Keep the last 50 links only.
+    await set({ notifyLinks: Object.fromEntries(Object.entries(links).slice(-50)) });
+  } catch {
+    // App not reachable. Try again next minute.
+  }
+}
+
+chrome.notifications.onClicked.addListener(async (id) => {
+  const url = (await get({ notifyLinks: {} })).notifyLinks[id];
+  if (url) chrome.tabs.create({ url });
+  chrome.notifications.clear(id);
 });
 
 // Only checks that the LinkedIn sign in cookie exists. Its value is never read out or sent anywhere.

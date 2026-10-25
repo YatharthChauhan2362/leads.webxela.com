@@ -123,12 +123,9 @@ export async function checkNow(formData: FormData) {
 }
 
 const Settings = z.object({
-  auto_assign: z.enum(["on", "off"]).default("off"),
   searches: z.string().max(5000),
   watched_profiles: z.string().max(5000),
   subreddits: z.string().max(2000),
-  min_score: z.coerce.number().int().min(0).max(100),
-  alert_score: z.coerce.number().int().min(0).max(100),
 });
 
 export async function saveSettings(formData: FormData) {
@@ -140,25 +137,6 @@ export async function saveSettings(formData: FormData) {
   back(formData, "Settings saved.");
 }
 
-export async function addManual(formData: FormData) {
-  const me = await requireMember();
-  const { ingestPosts } = await import("@/lib/ingest");
-  const text = String(formData.get("text") ?? "").trim();
-  if (text.length < 20) back(formData, "Paste the full post text, at least 20 characters.", "error");
-  const res = await ingestPosts([
-    {
-      source: "manual",
-      text,
-      author: String(formData.get("author") ?? "") || null,
-      authorUrl: String(formData.get("author_url") ?? "") || null,
-      postUrl: String(formData.get("post_url") ?? "") || null,
-    },
-  ]);
-  await logActivity(me, "add_post", { detail: text.slice(0, 200) });
-  back(formData, res.added ? "Lead added." : "Not added. It scored below your minimum, or it is already in the list.", res.added ? "ok" : "error");
-}
-
-/** Gives a lead to one team member, or takes it back ("me" assigns it to yourself). */
 export async function assignLead(formData: FormData) {
   const me = await requireMember();
   const id = Id.parse(formData.get("id"));
@@ -244,4 +222,47 @@ export async function saveMySearches(formData: FormData) {
   must(await sb().from("members").update({ searches: clean(r.data.searches), watched_profiles: clean(r.data.watched_profiles) }).eq("id", me.id));
   await logActivity(me, "settings", { detail: "Updated my own searches" });
   back(formData, "Your searches are saved. Your extension uses them from its next check.");
+}
+
+const Prefs = z.object({
+  pref_services: z.string().max(3000),
+  pref_exclude: z.string().max(3000),
+  pref_locations: z.string().max(2000),
+  pref_max_age_hours: z.coerce.number().int().min(1).max(720),
+  fetch_minutes: z.coerce.number().int().min(15).max(1440),
+  ext_minutes: z.coerce.number().int().min(15).max(240),
+  ext_daily_cap: z.coerce.number().int().min(10).max(300),
+  digest_hour: z.coerce.number().int().min(0).max(23),
+  alert_score: z.coerce.number().int().min(0).max(100),
+  min_score: z.coerce.number().int().min(0).max(100),
+});
+
+/** Lead preferences and schedules. Admins only; members and their extensions follow them. */
+export async function savePreferences(formData: FormData) {
+  const me = await requireMember("admin");
+  const r = Prefs.safeParse(Object.fromEntries(formData));
+  if (!r.success) back(formData, "Check the numbers: server every 15 to 1440 minutes, extension every 15 to 240, daily pages 10 to 300.", "error");
+  const tidy = (v: string) => v.replace(/\r/g, "").split("\n").map((l) => l.trim()).filter(Boolean).join("\n");
+  const on = (k: string) => (formData.get(k) === "on" ? "on" : "off");
+  const types = ["project", ...(formData.get("type_job") === "on" ? ["job"] : [])].join(",");
+  await setSettings({
+    pref_services: tidy(r.data.pref_services),
+    pref_exclude: tidy(r.data.pref_exclude),
+    pref_locations: tidy(r.data.pref_locations),
+    pref_max_age_hours: String(r.data.pref_max_age_hours),
+    pref_lead_types: types,
+    fetch_minutes: String(r.data.fetch_minutes),
+    ext_minutes: String(r.data.ext_minutes),
+    ext_daily_cap: String(r.data.ext_daily_cap),
+    digest_hour: String(r.data.digest_hour),
+    alert_score: String(r.data.alert_score),
+    min_score: String(r.data.min_score),
+    src_google: on("src_google"),
+    src_reddit: on("src_reddit"),
+    src_hn: on("src_hn"),
+    notify_hot: on("notify_hot"),
+    auto_assign: on("auto_assign"),
+  });
+  await logActivity(me, "settings", { detail: "Changed preferences" });
+  back(formData, "Preferences saved. They apply to every new post from now on.");
 }

@@ -1,5 +1,5 @@
 import "server-only";
-import { getLines } from "./db";
+import { getLines, getSettings } from "./db";
 import { ingestPosts, logRun, type PostIn } from "./ingest";
 import { linkedinPostsFromSearch } from "./google-search";
 
@@ -126,11 +126,15 @@ export async function pollSources() {
   if (running) return { found: 0, added: 0, skipped: true };
   running = true;
   try {
+    // Each source can be switched off on the Preferences page.
+    const on = await getSettings();
     const [reddit, hn, linkedin] = await Promise.all([
-      fetchReddit().catch((e) => (console.warn("[reddit]", e.message), [])),
-      fetchHn(),
+      on.src_reddit === "on" ? fetchReddit().catch((e) => (console.warn("[reddit]", e.message), [])) : Promise.resolve([] as PostIn[]),
+      on.src_hn === "on" ? fetchHn() : Promise.resolve([] as PostIn[]),
       // LinkedIn posts found through Google, so leads come in even when nobody's Chrome is open.
-      getLines("searches").then(linkedinPostsFromSearch).catch((e) => (console.warn("[google search]", e.message), [] as PostIn[])),
+      on.src_google === "on"
+        ? getLines("searches").then(linkedinPostsFromSearch).catch((e) => (console.warn("[google search]", e.message), [] as PostIn[]))
+        : Promise.resolve([] as PostIn[]),
     ]);
     const posts = [...reddit, ...hn, ...linkedin];
     const res = await ingestPosts(posts);

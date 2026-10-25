@@ -10,16 +10,17 @@ import { Suspense } from "react";
 
 const ROLE_WORDS: Record<string, string> = { owner: "Owner", admin: "Admin", member: "Member" };
 
-function nav(newCount: number, member: Member | null): NavGroup[] {
+function nav(newCount: number, member: Member | null, unread = 0): NavGroup[] {
   const admin = !member || can(member, "admin");
   return [
     {
       label: "Leads",
       items: [
         { href: "/me", label: "My work" },
+        { href: "/notifications", label: "Notifications", count: unread },
+        { href: "/search", label: "Search" },
         { href: "/", label: "Leads", count: newCount },
         { href: "/people", label: "People" },
-        { href: "/add", label: "Add a post" },
       ],
     },
     {
@@ -27,7 +28,8 @@ function nav(newCount: number, member: Member | null): NavGroup[] {
       items: [
         ...(admin ? [{ href: "/linkedin", label: "LinkedIn account" }] : []),
         { href: "/extension", label: "Chrome extension" },
-        ...(admin ? [{ href: "/settings", label: "Searches and alerts" }] : []),
+        ...(admin ? [{ href: "/preferences", label: "Preferences" }] : []),
+        ...(admin ? [{ href: "/settings", label: "Searches and branding" }] : []),
         ...(admin ? [{ href: "/team", label: "Team" }] : []),
         ...(admin ? [{ href: "/activity", label: "Activity" }] : []),
       ],
@@ -53,12 +55,12 @@ function StatusCard({ last, company }: { last: Last; company: string }) {
   );
 }
 
-function SideContent({ count, last, member, company }: { count: number; last: Last; member: Member | null; company: string }) {
+function SideContent({ count, last, member, company, unread }: { count: number; last: Last; member: Member | null; company: string; unread: number }) {
   return (
     <div className="flex min-h-full flex-col gap-6 [&>*]:shrink-0">
       <StatusCard last={last} company={company} />
       <nav aria-label="Main">
-        <NavLinks groups={nav(count, member)} />
+        <NavLinks groups={nav(count, member, unread)} />
       </nav>
       {member ? (
         <div className="mt-auto space-y-2 border-t border-border pt-4">
@@ -90,6 +92,7 @@ export async function AppShell({ children, member }: { children: ReactNode; memb
   ]);
   const count = newLeads.count ?? 0;
   const brand = await getBrand();
+  const unread = member ? ((await sb().from("notifications").select("id", { count: "exact", head: true }).eq("member_id", member.id).is("read_at", null)).count ?? 0) : 0;
   const last = must(lastRun) as Last;
   return (
     <div className="min-h-dvh bg-canvas lg:grid lg:grid-cols-[272px_1fr]">
@@ -103,14 +106,14 @@ export async function AppShell({ children, member }: { children: ReactNode; memb
           <Brand />
         </div>
         <div className="flex-1 overflow-y-auto p-4">
-          <SideContent count={count} last={last} member={member} company={brand.company} />
+          <SideContent count={count} last={last} member={member} company={brand.company} unread={unread} />
         </div>
       </aside>
       <div className="min-w-0">
         <header className="no-print sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background px-4 lg:hidden">
           <Brand />
           <MobileMenu label="Open menu">
-            <SideContent count={count} last={last} member={member} company={brand.company} />
+            <SideContent count={count} last={last} member={member} company={brand.company} unread={unread} />
           </MobileMenu>
         </header>
         <main className="mx-auto w-full max-w-[1760px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>
