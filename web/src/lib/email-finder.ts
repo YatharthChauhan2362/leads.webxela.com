@@ -1,6 +1,7 @@
 import "server-only";
 import dns from "node:dns/promises";
 import { must, sb } from "./db";
+import { companyWebsite } from "./google-search";
 
 // Our own email finder, the same idea Apollo uses:
 // 1. find the company's email domain, 2. check it receives mail (MX),
@@ -85,6 +86,10 @@ async function domainFromName(name: string): Promise<string | null> {
   } catch {
     // Fall through to guessing.
   }
+  // The company's own LinkedIn page usually lists its website.
+  const site = await companyWebsite(name).catch(() => null);
+  const fromLinkedIn = site ? new URL(site).hostname.replace(/^www\./, "").toLowerCase() : null;
+  if (fromLinkedIn && (await hasMx(fromLinkedIn))) return fromLinkedIn;
   const slug = key.replace(/\s+/g, "");
   for (const tld of [".com", ".co.in", ".in", ".io", ".co"]) {
     if (await hasMx(slug + tld)) return slug + tld;

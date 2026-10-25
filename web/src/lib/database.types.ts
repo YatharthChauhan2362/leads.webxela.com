@@ -122,6 +122,7 @@ export type Database = {
       leads: {
         Row: {
           alerted: boolean
+          assigned_at: string | null
           assigned_to: string | null
           author: string | null
           author_url: string | null
@@ -131,7 +132,9 @@ export type Database = {
           captured_day: string | null
           contact_checked_at: string | null
           contact_note: string | null
+          contacted_at: string | null
           emails: string
+          follow_up_at: string | null
           headline: string | null
           id: number
           intent: string | null
@@ -149,12 +152,14 @@ export type Database = {
           text: string
           urgency: string | null
           websites: string
+          won_at: string | null
           work_email: string | null
           work_email_confidence: number | null
           work_email_status: string | null
         }
         Insert: {
           alerted?: boolean
+          assigned_at?: string | null
           assigned_to?: string | null
           author?: string | null
           author_url?: string | null
@@ -164,7 +169,9 @@ export type Database = {
           captured_day?: string | null
           contact_checked_at?: string | null
           contact_note?: string | null
+          contacted_at?: string | null
           emails?: string
+          follow_up_at?: string | null
           headline?: string | null
           id?: never
           intent?: string | null
@@ -182,12 +189,14 @@ export type Database = {
           text: string
           urgency?: string | null
           websites?: string
+          won_at?: string | null
           work_email?: string | null
           work_email_confidence?: number | null
           work_email_status?: string | null
         }
         Update: {
           alerted?: boolean
+          assigned_at?: string | null
           assigned_to?: string | null
           author?: string | null
           author_url?: string | null
@@ -197,7 +206,9 @@ export type Database = {
           captured_day?: string | null
           contact_checked_at?: string | null
           contact_note?: string | null
+          contacted_at?: string | null
           emails?: string
+          follow_up_at?: string | null
           headline?: string | null
           id?: never
           intent?: string | null
@@ -215,6 +226,7 @@ export type Database = {
           text?: string
           urgency?: string | null
           websites?: string
+          won_at?: string | null
           work_email?: string | null
           work_email_confidence?: number | null
           work_email_status?: string | null
@@ -244,13 +256,17 @@ export type Database = {
           email: string
           id: string
           invited_by: string | null
+          job: string
           last_login_at: string | null
+          last_seen_at: string | null
           login_with: string
           name: string | null
           provider: string | null
           role: string
+          searches: string
           status: string
           team_id: string | null
+          watched_profiles: string
         }
         Insert: {
           api_key?: string | null
@@ -259,13 +275,17 @@ export type Database = {
           email: string
           id?: string
           invited_by?: string | null
+          job?: string
           last_login_at?: string | null
+          last_seen_at?: string | null
           login_with?: string
           name?: string | null
           provider?: string | null
           role?: string
+          searches?: string
           status?: string
           team_id?: string | null
+          watched_profiles?: string
         }
         Update: {
           api_key?: string | null
@@ -274,13 +294,17 @@ export type Database = {
           email?: string
           id?: string
           invited_by?: string | null
+          job?: string
           last_login_at?: string | null
+          last_seen_at?: string | null
           login_with?: string
           name?: string | null
           provider?: string | null
           role?: string
+          searches?: string
           status?: string
           team_id?: string | null
+          watched_profiles?: string
         }
         Relationships: [
           {
@@ -301,6 +325,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          captured_by: string | null
           company: string | null
           company_domain: string | null
           email_alternatives: string
@@ -317,6 +342,7 @@ export type Database = {
           work_email_status: string | null
         }
         Insert: {
+          captured_by?: string | null
           company?: string | null
           company_domain?: string | null
           email_alternatives?: string
@@ -333,6 +359,7 @@ export type Database = {
           work_email_status?: string | null
         }
         Update: {
+          captured_by?: string | null
           company?: string | null
           company_domain?: string | null
           email_alternatives?: string
@@ -348,7 +375,15 @@ export type Database = {
           work_email_confidence?: number | null
           work_email_status?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_captured_by_fkey"
+            columns: ["captured_by"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       runs: {
         Row: {

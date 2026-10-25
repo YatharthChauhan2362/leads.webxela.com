@@ -100,7 +100,7 @@ async function showPerson(tab) {
     renderContacts(r.contacts, r.workEmail);
     if (r.checkedAt) $("p-status").textContent = `Looked up ${new Date(r.checkedAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}.`;
   } catch {
-    $("p-error").textContent = "Yatri Leads app is not reachable. Start it with npm run dev.";
+    $("p-error").textContent = "Cannot reach the app. Open Auto check and settings and check the App address.";
   }
   return true;
 }
@@ -148,22 +148,81 @@ $("open2").onclick = () => chrome.tabs.create({ url: settings.server });
 
 // ---------- General view and settings ----------
 
-chrome.storage.local.get(DEFAULTS, async (s) => {
+const JOBS = { lead_generator: "Lead generator", bde: "BDE", manager: "Manager", other: "Team member" };
+
+/** Uses the app's name, colour and logo, so the extension looks like your app. */
+function applyBrand(b) {
+  if (!b) return;
+  document.documentElement.style.setProperty("--b", b.color || "#0080ff");
+  $("brand-first").textContent = b.first || "Yatri";
+  $("brand-second").textContent = b.second || "";
+  if (b.logo) $("logo").src = b.logo;
+  document.title = `${b.first} ${b.second}`;
+}
+
+function ask(msg) {
+  return new Promise((res) => chrome.runtime.sendMessage(msg, (r) => res(chrome.runtime.lastError ? null : r)));
+}
+
+async function start() {
+  const s = await new Promise((r) => chrome.storage.local.get({ ...DEFAULTS, brand: null }, r));
   settings = s;
+  applyBrand(s.brand);
   for (const k of ["server", "apiKey", "every", "dailyCap"]) $(k).value = s[k];
   $("capture").checked = s.capture;
   $("watch").checked = s.watch;
   renderGeneral(s);
-  try {
-    await api("/api/searches");
-    $("conn").textContent = "Connected";
-  } catch {
-    $("conn").textContent = "App not running";
+
+  // Step 1: are we connected to the app with a valid key?
+  const me = await ask({ type: "me" });
+  if (!me || !me.connected) {
+    $("conn").textContent = "Not connected";
+    $("conn").className = "pill off";
+    $("setup").classList.remove("hidden");
+    $("settings-card").classList.add("hidden");
+    $("setup-error").textContent = s.apiKey ? (me?.error ?? "") : "";
+    return;
   }
+  applyBrand(me.brand);
+  $("conn").textContent = "Connected";
+  $("conn").className = "pill on";
+  if (me.member) $("who-am-i").textContent = `Connected as ${me.member.name}, ${JOBS[me.member.job] ?? "team member"}`;
+
+  // Step 2: a LinkedIn profile shows the person, anything else shows today's numbers.
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (tab) await showPerson(tab);
+  if (!(tab && (await showPerson(tab)))) $("general").classList.remove("hidden");
+}
+
+$("connect").onclick = async () => {
+  const key = $("setup-key").value.trim();
+  if (!key) {
+    $("setup-error").textContent = "Paste your key first.";
+    return;
+  }
+  $("connect").disabled = true;
+  $("connect").textContent = "Connecting...";
+  await new Promise((r) => chrome.storage.local.set({ apiKey: key, server: settings.server || DEFAULTS.server }, r));
+  const r = await ask({ type: "settings-changed" });
+  $("connect").disabled = false;
+  $("connect").textContent = "Connect";
+  if (r && r.connected) {
+    $("setup").classList.add("hidden");
+    $("settings-card").classList.remove("hidden");
+    start();
+  } else {
+    $("setup-error").textContent = r?.error || "Could not connect.";
+  }
+};
+
+$("open-app").onclick = (e) => {
+  e.preventDefault();
+  chrome.tabs.create({ url: (settings.server || DEFAULTS.server).replace(/\/$/, "") + "/extension" });
+};
+
+start();
+chrome.storage.onChanged.addListener((c) => {
+  if (c.stats || c.lastError || c.lastWatch) chrome.storage.local.get(DEFAULTS, renderGeneral);
 });
-chrome.storage.onChanged.addListener(() => chrome.storage.local.get(DEFAULTS, renderGeneral));
 
 function save() {
   chrome.storage.local.set(
@@ -181,7 +240,10 @@ function save() {
 $("save-settings").onclick = () => {
   save();
   $("save-settings").textContent = "Saved";
-  setTimeout(() => ($("save-settings").textContent = "Save settings"), 1200);
+  setTimeout(() => {
+    $("save-settings").textContent = "Save settings";
+    start();
+  }, 900);
 };
 $("capture").onchange = save;
 $("watch").onchange = save;
@@ -193,14 +255,12 @@ $("scan").onclick = async () => {
     return;
   }
   $("scan").textContent = "Saving...";
-  chrome.tabs.sendMessage(tab.id, { type: "scan" }, (r) => {
-    if (chrome.runtime.lastError) $("error").textContent = "Reload the LinkedIn tab once, then try again.";
-    $("scan").textContent = r && r.posts ? `Sent ${r.posts} posts, ${r.added || 0} new leads` : "No new posts on this page";
-    setTimeout(() => ($("scan").textContent = "Save posts on this page"), 2500);
-  });
+  const r = await toTab(tab.id, { type: "scan" });
+  $("scan").textContent = r && r.posts ? `Sent ${r.posts} posts, ${r.added || 0} new leads` : "No new posts on this page";
+  setTimeout(() => ($("scan").textContent = "Save posts on this page"), 2500);
 };
 
-$("open").onclick = () => chrome.tabs.create({ url: $("server").value.trim() || DEFAULTS.server });
+$("open").onclick = () => chrome.tabs.create({ url: ($("server").value.trim() || DEFAULTS.server).replace(/\/$/, "") + "/me" });
 
 $("watchNow").onclick = () => {
   $("watchNow").textContent = "Running in a background tab...";

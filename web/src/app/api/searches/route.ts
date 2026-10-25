@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { CORS, checkKey, preflight } from "@/lib/api";
-import { getLines } from "@/lib/db";
+import { CORS, apiMember, checkKey, preflight } from "@/lib/api";
+import { getLines, lines } from "@/lib/db";
 import { linkedinSearchUrl } from "@/lib/linkedin";
 
 export const OPTIONS = preflight;
@@ -9,7 +9,12 @@ export const OPTIONS = preflight;
 export async function GET(req: Request) {
   const denied = await checkKey(req);
   if (denied) return denied;
-  const searches = (await getLines("searches")).map(linkedinSearchUrl);
-  const profiles = (await getLines("watched_profiles")).map((u: string) => u.replace(/\/?(\?.*)?$/, "/") + "recent-activity/all/");
+  // The team's searches plus this member's own, so each person's extension also checks what they care about.
+  const me = await apiMember(req);
+  const mine = (s: string | undefined) => lines(s ?? "");
+  const phrases = [...new Set([...(await getLines("searches")), ...mine(me?.searches)])];
+  const watched = [...new Set([...(await getLines("watched_profiles")), ...mine(me?.watched_profiles)])];
+  const searches = phrases.map(linkedinSearchUrl);
+  const profiles = watched.map((u: string) => u.replace(/\/?(\?.*)?$/, "/") + "recent-activity/all/");
   return NextResponse.json({ urls: [...profiles, ...searches] }, { headers: CORS });
 }

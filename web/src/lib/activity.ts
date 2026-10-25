@@ -6,6 +6,7 @@ export type ActivityWho = { id: string; email: string } | null;
 
 /** Words admins see on the Activity page, one per action. */
 export const ACTION_WORDS: Record<string, string> = {
+  online: "Was active",
   sign_in: "Signed in",
   sign_out: "Signed out",
   sign_in_refused: "Sign in refused",

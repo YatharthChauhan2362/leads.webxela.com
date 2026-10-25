@@ -10,6 +10,7 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { THead, Table, Td, Th, Tr } from "@/components/ui/table";
 import { getSetting, hoursAgo, must, sb, type Lead } from "@/lib/db";
 import { currentMember } from "@/lib/session";
+import { myLeadsFilter, seesAll } from "@/lib/access";
 
 type SP = { [key: string]: string | string[] | undefined };
 
@@ -36,12 +37,17 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<SP
   const sort = str(sp.sort) === "newest" ? "newest" : "best";
   const who = str(sp.who);
   const me = await currentMember();
+  const all = seesAll(me);
+  const todayDate = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
   let query = sb().from("leads").select("*").gte("score", min);
+  // Members only ever see leads assigned to them or captured by them.
+  if (!all && me) query = query.or(myLeadsFilter(me));
   if (status !== "all") query = query.eq("status", status);
   if (source) query = query.eq("source", source);
   if (who === "me" && me) query = query.eq("assigned_to", me.id);
-  else if (who === "none") query = query.is("assigned_to", null);
+  else if (who === "followups" && me) query = query.eq("assigned_to", me.id).lte("follow_up_at", todayDate);
+  else if (who === "none" && all) query = query.is("assigned_to", null);
   else if (/^[0-9a-f-]{36}$/.test(who)) query = query.eq("assigned_to", who);
   if (contact) query = query.or("emails.neq.,phones.neq.,work_email.not.is.null");
   if (q) {
@@ -54,20 +60,33 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<SP
       ? query.order("captured_at", { ascending: false })
       : query.order("captured_day", { ascending: false }).order("score", { ascending: false }).order("captured_at", { ascending: false });
 
+  type Stats = { today: number; hot: number; with_contact: number; total: number; by_status: Record<string, number> };
   const [leads, stats, people] = await Promise.all([
     query.limit(300).then((r) => must(r) as Lead[]),
-    getSetting("alert_score").then(async (alert) =>
-      must(await sb().rpc("lead_stats", { p_since: hoursAgo(24), p_alert: Number(alert) || 70 })) as {
-        today: number;
-        hot: number;
-        with_contact: number;
-        total: number;
-        by_status: Record<string, number>;
-      },
-    ),
-    sb().from("members").select("id, name, email").neq("status", "disabled").order("name").then((r) => must(r) as { id: string; name: string | null; email: string }[]),
+    getSetting("alert_score").then(async (alert): Promise<Stats> => {
+      if (all) return must(await sb().rpc("lead_stats", { p_since: hoursAgo(24), p_alert: Number(alert) || 70 })) as Stats;
+      // A member's numbers count only their own leads.
+      const mine = must(await sb().from("leads").select("status, score, captured_at, emails, phones, work_email").or(myLeadsFilter(me!))) as Pick<
+        Lead,
+        "status" | "score" | "captured_at" | "emails" | "phones" | "work_email"
+      >[];
+      const since = hoursAgo(24);
+      const by_status: Record<string, number> = {};
+      for (const l of mine) by_status[l.status] = (by_status[l.status] ?? 0) + 1;
+      return {
+        today: mine.filter((l) => l.captured_at >= since).length,
+        hot: mine.filter((l) => l.captured_at >= since && l.score >= (Number(alert) || 70)).length,
+        with_contact: mine.filter((l) => l.emails || l.phones || l.work_email).length,
+        total: mine.length,
+        by_status,
+      };
+    }),
+    all
+      ? sb().from("members").select("id, name, email").neq("status", "disabled").order("name").then((r) => must(r) as { id: string; name: string | null; email: string }[])
+      : Promise.resolve([] as { id: string; name: string | null; email: string }[]),
   ]);
   const nameOf = new Map(people.map((p) => [p.id, p.name || p.email.split("@")[0]]));
+  if (me) nameOf.set(me.id, "You");
   const counts = stats.by_status;
   const { total, today, hot, with_contact: withContact } = stats;
 
@@ -91,9 +110,11 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<SP
               <input type="hidden" name="back" value={backTo} />
               <SubmitButton pendingText="Checking...">Check now</SubmitButton>
             </form>
-            <a href="/api/export" className={buttonClass("secondary")}>
-              Download CSV
-            </a>
+            {all ? (
+              <a href="/api/export" className={buttonClass("secondary")}>
+                Download CSV
+              </a>
+            ) : null}
           </>
         }
       />
@@ -133,9 +154,10 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<SP
         </Select>
         <label className="sr-only" htmlFor="who">Assigned to</label>
         <Select id="who" name="who" defaultValue={who}>
-          <option value="">Anyone</option>
-          {me ? <option value="me">Mine</option> : null}
-          <option value="none">Not assigned</option>
+          <option value="">{all ? "Anyone" : "All my leads"}</option>
+          {me ? <option value="me">Assigned to me</option> : null}
+          {me ? <option value="followups">Follow-ups due</option> : null}
+          {all ? <option value="none">Not assigned</option> : null}
           {people.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name || p.email}
@@ -216,7 +238,12 @@ export default async function Inbox({ searchParams }: { searchParams: Promise<SP
                     ) : null}
                   </Td>
                   <Td className="align-top text-[14px] whitespace-nowrap">
-                    {l.assigned_to ? nameOf.get(l.assigned_to) ?? "Former member" : <span className="text-muted-foreground">Nobody</span>}
+                    {l.assigned_to ? (nameOf.get(l.assigned_to) ?? (all ? "Former member" : "A teammate")) : <span className="text-muted-foreground">Nobody</span>}
+                    {l.follow_up_at ? (
+                      <p className={`text-[13px] ${l.follow_up_at <= todayDate ? "font-semibold text-danger" : "text-muted-foreground"}`}>
+                        Follow up {new Date(l.follow_up_at + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                      </p>
+                    ) : null}
                   </Td>
                   <Td className="align-top">
                     <form action={setStatus} className="flex flex-col gap-1.5">

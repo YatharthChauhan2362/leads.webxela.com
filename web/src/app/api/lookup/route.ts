@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { CORS, apiMember, checkKey, preflight } from "@/lib/api";
 import { logActivity } from "@/lib/activity";
+import { contactsFromWeb } from "@/lib/google-search";
 import type { Profile } from "@/lib/db";
 import { PostIn, ProfileIn, cleanProfileUrl, getProfile, ingestPosts, saveProfile } from "@/lib/ingest";
 
@@ -41,7 +42,14 @@ export async function POST(req: Request) {
   let contacts = null;
   let workEmail = null;
   if (profile) {
-    const r = await saveProfile(profile);
+    let r = await saveProfile(profile, (await apiMember(req))?.id);
+    // Nothing public on LinkedIn or their website: search the web for their name and company.
+    if (!r.profile.emails && !r.profile.phones) {
+      const web = await contactsFromWeb(r.profile.name, r.profile.company, r.profile.company_domain);
+      if (web.emails.length || web.phones.length) {
+        r = await saveProfile({ ...profile, emails: web.emails, phones: web.phones, websites: [] }, (await apiMember(req))?.id);
+      }
+    }
     await logActivity(await apiMember(req), "lookup", { target: profile.url, detail: [profile.name, r.profile.emails, r.profile.phones, r.prediction?.email].filter(Boolean).join(" | ") });
     contacts = toContacts(r.profile);
     workEmail = r.prediction ? { ...r.prediction, alternatives: r.prediction.alternatives } : workEmailOf(r.profile);

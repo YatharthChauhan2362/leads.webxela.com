@@ -2,6 +2,8 @@ import { Badge } from "@/components/ui/layout";
 
 export const SOURCES: Record<string, string> = { linkedin: "LinkedIn", reddit: "Reddit", hackernews: "Hacker News", manual: "Added by hand" };
 
+export const JOB_WORDS: Record<string, string> = { lead_generator: "Lead generator", bde: "BDE (sales)", manager: "Manager", other: "Other" };
+
 export const STATUS_WORDS: Record<string, string> = { new: "New", contacted: "Contacted", replied: "Replied", won: "Won", lost: "Lost" };
 
 const WORK_WORDS: Record<string, string> = { found: "Found", likely: "Likely", guess: "Guess" };

@@ -5,6 +5,7 @@ import { getSettings, must, sb, type Lead, type Profile } from "./db";
 import { extractEmails, extractPhones, mergeList } from "./contacts";
 import { scorePost } from "./score";
 import { sendLeadEmail } from "./alerts";
+import { assignTo, pickBde } from "./assign";
 import { contactsFromWebsites } from "./website";
 import { companyFromHeadline, predictWorkEmail, type Prediction } from "./email-finder";
 
@@ -117,7 +118,39 @@ export async function ingestPosts(posts: PostIn[], opts: { force?: boolean; capt
     );
     if (rows.length) {
       added++;
+      // Every LinkedIn post author also goes to People, so you do not have to open their profile first.
+      if (p.source === "linkedin" && authorUrl && /linkedin\.com\/in\//.test(authorUrl) && !profile) {
+        await sb()
+          .from("profiles")
+          .upsert(
+            {
+              url: authorUrl,
+              name: p.author ?? null,
+              headline: p.headline ?? null,
+              company: companyFromHeadline(p.headline),
+              company_domain: guess?.domain ?? null,
+              work_email: guess?.email ?? null,
+              work_email_status: guess?.status ?? null,
+              work_email_confidence: guess?.confidence ?? null,
+              email_alternatives: guess ? guess.alternatives.join(", ") : "",
+              emails: emails.join(", "),
+              phones: phones.join(", "),
+              captured_by: opts.capturedBy ?? null,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "url", ignoreDuplicates: true },
+          );
+      }
       if (rows[0].score >= alertScore) hot.push(rows[0]);
+    }
+  }
+  // Hand new hot leads to BDEs when the admin switched that on.
+  if (hot.length && settings.auto_assign === "on") {
+    for (const l of hot) {
+      if (l.assigned_to) continue;
+      const bde = await pickBde();
+      if (!bde) break;
+      await assignTo(l.id, bde.id);
     }
   }
   if (hot.length && (await sendLeadEmail(hot))) {
@@ -132,7 +165,7 @@ export async function getProfile(url: string): Promise<Profile | null> {
   return r.data;
 }
 
-export async function saveProfile(p: ProfileIn) {
+export async function saveProfile(p: ProfileIn, capturedBy?: string | null) {
   const url = cleanProfileUrl(p.url)!;
   const emails = p.emails.flatMap(extractEmails);
   const phones = p.phones.flatMap((x) => (extractPhones(x).length ? extractPhones(x) : [x.trim()])).filter(Boolean);
@@ -171,6 +204,7 @@ export async function saveProfile(p: ProfileIn) {
         work_email_status: guess?.status ?? old?.work_email_status ?? null,
         work_email_confidence: guess?.confidence ?? old?.work_email_confidence ?? null,
         email_alternatives: guess ? guess.alternatives.join(", ") : (old?.email_alternatives ?? ""),
+        captured_by: old?.captured_by ?? capturedBy ?? null,
         emails: mergeList(old?.emails ?? "", [...emails, ...siteEmails]),
         phones: mergeList(old?.phones ?? "", [...phones, ...sitePhones]),
         websites,

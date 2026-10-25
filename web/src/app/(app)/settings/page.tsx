@@ -1,9 +1,10 @@
 import { rescoreAll, saveBranding, saveSettings } from "@/app/actions";
 import { Flash } from "@/components/ui/flash";
-import { Field, FormSection, Input, Textarea } from "@/components/ui/form";
+import { Checkbox, Field, FormSection, Input, Textarea } from "@/components/ui/form";
 import { Callout, Card, CardHeader, PageHeader } from "@/components/ui/layout";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { aiEnabled } from "@/lib/ai";
+import { searchEnabled, searchesLeftToday } from "@/lib/google-search";
 import { requireMember } from "@/lib/session";
 import { emailEnabled, emailTo } from "@/lib/alerts";
 import { getSettings, lines } from "@/lib/db";
@@ -18,9 +19,14 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       <PageHeader title="Searches and alerts" description="What to look for, where to look, and when to tell you." />
       <Flash searchParams={searchParams} />
 
-      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <Callout tone={aiEnabled() ? "green" : "amber"} label={aiEnabled() ? "AI scoring is on" : "AI scoring is off"}>
           {aiEnabled() ? "Each post is read by AI and scored." : "Posts are scored by keywords. Add AI_API_KEY to .env.local for smarter scores."}
+        </Callout>
+        <Callout tone={searchEnabled() ? "green" : "amber"} label={searchEnabled() ? "Google search is on" : "Google search is off"}>
+          {searchEnabled()
+            ? `Finds LinkedIn posts every 3 hours and public emails for Find. ${await searchesLeftToday()} free searches left today.`
+            : "Add GOOGLE_CSE_KEY to find LinkedIn posts from the server and search the web for contact details."}
         </Callout>
         <Callout tone={email ? "green" : "amber"} label={email ? "Email alerts are on" : "Email alerts are off"}>
           {email ? `Hot leads are emailed to ${emailTo()} through Zoho.` : "Add the Zoho EMAIL_USER and EMAIL_PASS to .env.local to get hot leads by email."}
@@ -80,6 +86,15 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 <Field label="Alert me at" htmlFor="alert_score" hint="Posts at or above this are emailed to you.">
                   <Input id="alert_score" name="alert_score" type="number" min={0} max={100} defaultValue={settings.alert_score} required />
                 </Field>
+                <div className="sm:col-span-2 lg:pt-7">
+                  <Checkbox
+                    name="auto_assign"
+                    value="on"
+                    defaultChecked={settings.auto_assign === "on"}
+                    label="Give hot leads to BDEs automatically"
+                    hint="Each new lead at or above the alert score goes to the BDE with the fewest open leads."
+                  />
+                </div>
               </div>
             </FormSection>
             <SubmitButton>Save settings</SubmitButton>

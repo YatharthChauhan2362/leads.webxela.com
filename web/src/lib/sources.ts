@@ -1,6 +1,7 @@
 import "server-only";
 import { getLines } from "./db";
 import { ingestPosts, logRun, type PostIn } from "./ingest";
+import { linkedinPostsFromSearch } from "./google-search";
 
 const UA = "web:yatri-leads:0.1 (by Yatri Cloud)";
 
@@ -125,8 +126,13 @@ export async function pollSources() {
   if (running) return { found: 0, added: 0, skipped: true };
   running = true;
   try {
-    const [reddit, hn] = await Promise.all([fetchReddit().catch((e) => (console.warn("[reddit]", e.message), [])), fetchHn()]);
-    const posts = [...reddit, ...hn];
+    const [reddit, hn, linkedin] = await Promise.all([
+      fetchReddit().catch((e) => (console.warn("[reddit]", e.message), [])),
+      fetchHn(),
+      // LinkedIn posts found through Google, so leads come in even when nobody's Chrome is open.
+      getLines("searches").then(linkedinPostsFromSearch).catch((e) => (console.warn("[google search]", e.message), [] as PostIn[])),
+    ]);
+    const posts = [...reddit, ...hn, ...linkedin];
     const res = await ingestPosts(posts);
     await logRun("poll", res.found, res.added);
     return res;

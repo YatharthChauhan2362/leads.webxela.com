@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
-import { assignLead, deleteLead, draftReply, saveNotes, setStatus } from "@/app/actions";
+import { assignLead, deleteLead, draftReply, handToBde, saveNotes, setFollowUp, setStatus } from "@/app/actions";
+import { requireLeadAccess, seesAll } from "@/lib/access";
+import { currentMember } from "@/lib/session";
 import { ContactCell, SOURCES, STATUS_WORDS, ScoreBadge, list } from "@/components/leads";
 import { timeAgo } from "@/components/shell/app-shell";
 import { buttonClass } from "@/components/ui/button";
@@ -12,11 +14,15 @@ import { must, sb, type Lead, type Profile } from "@/lib/db";
 export default async function LeadPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const id = Number((await params).id);
   if (!Number.isInteger(id)) notFound();
+  const me = await currentMember();
+  await requireLeadAccess(me, id);
+  const all = seesAll(me);
   const lead = must(await sb().from("leads").select("*").eq("id", id).maybeSingle()) as Lead | null;
   if (!lead) notFound();
   const person = lead.author_url ? (must(await sb().from("profiles").select("*").eq("url", lead.author_url).maybeSingle()) as Profile | null) : null;
   const back = `/leads/${id}`;
-  const people = must(await sb().from("members").select("id, name, email").neq("status", "disabled").order("name")) as { id: string; name: string | null; email: string }[];
+  // Only admins see the team list. Members can take the lead themselves or give it to a BDE.
+  const people = all ? (must(await sb().from("members").select("id, name, email, job").neq("status", "disabled").order("name")) as { id: string; name: string | null; email: string; job: string }[]) : [];
 
   return (
     <>
@@ -109,23 +115,61 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
 
           <Card>
             <CardHeader title="Assigned to" description="Who is working this lead." />
-            <form action={assignLead} className="flex gap-2">
+            <p className="mb-3 text-[15px]">
+              {lead.assigned_to ? (lead.assigned_to === me?.id ? "You" : (people.find((p) => p.id === lead.assigned_to)?.name ?? people.find((p) => p.id === lead.assigned_to)?.email ?? "A teammate")) : "Nobody yet"}
+            </p>
+            {all ? (
+              <form action={assignLead} className="flex gap-2">
+                <input type="hidden" name="id" value={lead.id} />
+                <input type="hidden" name="back" value={back} />
+                <label className="sr-only" htmlFor="member">
+                  Assigned to
+                </label>
+                <select id="member" name="member" defaultValue={lead.assigned_to ?? ""} className="h-11 min-w-0 flex-1 rounded-xl border border-input bg-background px-3 text-[15px]">
+                  <option value="">Nobody</option>
+                  {people.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name || p.email}
+                      {p.job === "bde" ? " (BDE)" : p.job === "lead_generator" ? " (Lead generator)" : ""}
+                    </option>
+                  ))}
+                </select>
+                <SubmitButton pendingText="Saving...">Save</SubmitButton>
+              </form>
+            ) : null}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <form action={handToBde}>
+                <input type="hidden" name="id" value={lead.id} />
+                <input type="hidden" name="back" value={back} />
+                <SubmitButton variant="secondary" pendingText="Handing over...">
+                  Give to a BDE
+                </SubmitButton>
+              </form>
+              {me && lead.assigned_to !== me.id ? (
+                <form action={assignLead}>
+                  <input type="hidden" name="id" value={lead.id} />
+                  <input type="hidden" name="back" value={back} />
+                  <input type="hidden" name="member" value="me" />
+                  <SubmitButton variant="secondary" pendingText="Saving...">
+                    Take it myself
+                  </SubmitButton>
+                </form>
+              ) : null}
+            </div>
+            <p className="mt-2 text-[13px] text-muted-foreground">Give to a BDE picks the BDE with the fewest open leads.</p>
+          </Card>
+
+          <Card>
+            <CardHeader title="Follow up" description="The day to contact them next. It shows in Follow-ups due." />
+            <form action={setFollowUp} className="flex gap-2">
               <input type="hidden" name="id" value={lead.id} />
               <input type="hidden" name="back" value={back} />
-              <label className="sr-only" htmlFor="member">
-                Assigned to
+              <label className="sr-only" htmlFor="follow_up_at">
+                Follow up on
               </label>
-              <select id="member" name="member" defaultValue={lead.assigned_to ?? ""} className="h-11 min-w-0 flex-1 rounded-xl border border-input bg-background px-3 text-[15px]">
-                <option value="">Nobody</option>
-                {people.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name || p.email}
-                  </option>
-                ))}
-              </select>
+              <input id="follow_up_at" name="follow_up_at" type="date" defaultValue={lead.follow_up_at ?? ""} className="h-11 min-w-0 flex-1 rounded-xl border border-input bg-background px-3 text-[15px]" />
               <SubmitButton pendingText="Saving...">Save</SubmitButton>
             </form>
-            {people.length ? null : <p className="mt-2 text-[13px] text-muted-foreground">Invite people on the Team page to assign leads.</p>}
           </Card>
 
           <Card>
@@ -145,6 +189,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
               </select>
               <SubmitButton pendingText="Saving...">Save</SubmitButton>
             </form>
+            {all ? (
             <form action={deleteLead} className="mt-4 border-t border-border pt-4">
               <input type="hidden" name="id" value={lead.id} />
               <input type="hidden" name="back" value="/" />
@@ -152,6 +197,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
                 Remove lead
               </SubmitButton>
             </form>
+            ) : null}
           </Card>
         </div>
       </div>

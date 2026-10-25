@@ -16,6 +16,7 @@ function nav(newCount: number, member: Member | null): NavGroup[] {
     {
       label: "Leads",
       items: [
+        { href: "/me", label: "My work" },
         { href: "/", label: "Leads", count: newCount },
         { href: "/people", label: "People" },
         { href: "/add", label: "Add a post" },
@@ -27,7 +28,7 @@ function nav(newCount: number, member: Member | null): NavGroup[] {
         ...(admin ? [{ href: "/linkedin", label: "LinkedIn account" }] : []),
         { href: "/extension", label: "Chrome extension" },
         ...(admin ? [{ href: "/settings", label: "Searches and alerts" }] : []),
-        { href: "/team", label: "Team" },
+        ...(admin ? [{ href: "/team", label: "Team" }] : []),
         ...(admin ? [{ href: "/activity", label: "Activity" }] : []),
       ],
     },
@@ -81,7 +82,10 @@ function SideContent({ count, last, member, company }: { count: number; last: La
 
 export async function AppShell({ children, member }: { children: ReactNode; member: Member | null }) {
   const [newLeads, lastRun] = await Promise.all([
-    sb().from("leads").select("id", { count: "exact", head: true }).eq("status", "new"),
+    // Members only count their own new leads.
+    (member && !can(member, "admin")
+      ? sb().from("leads").select("id", { count: "exact", head: true }).eq("status", "new").or(`assigned_to.eq.${member.id},captured_by.eq.${member.id}`)
+      : sb().from("leads").select("id", { count: "exact", head: true }).eq("status", "new")),
     sb().from("runs").select("at, added").order("id", { ascending: false }).limit(1).maybeSingle(),
   ]);
   const count = newLeads.count ?? 0;

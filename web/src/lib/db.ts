@@ -42,6 +42,11 @@ export const DEFAULT_SETTINGS = {
   subreddits: "forhire\nslavelabour\nstartups\nSaaS\nentrepreneur",
   min_score: "0",
   alert_score: "70",
+  // "on" gives every new hot lead to the BDE with the fewest open leads.
+  auto_assign: "off",
+  // Google search: "YYYY-MM-DD:count" for the free daily allowance, and when posts were last searched.
+  cse_quota: "",
+  cse_last_posts: "0",
   // Branding, set by admins on Searches and alerts.
   brand_first: "Yatri",
   brand_second: "Leads",

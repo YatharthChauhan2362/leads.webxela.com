@@ -36,7 +36,14 @@ export function ActivityTracker() {
     };
     document.addEventListener("copy", onCopy);
     document.addEventListener("click", onClick, true);
+    // Once a minute while the app is on screen, so admins see who is online and for how long.
+    const beat = () => {
+      if (document.visibilityState === "visible") send({ action: "online" });
+    };
+    beat();
+    const timer = setInterval(beat, 60_000);
     return () => {
+      clearInterval(timer);
       document.removeEventListener("copy", onCopy);
       document.removeEventListener("click", onClick, true);
     };

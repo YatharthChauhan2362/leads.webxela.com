@@ -6,9 +6,11 @@ import { z } from "zod";
 import { must, sb, setSettings, type Lead } from "@/lib/db";
 import { aiEnabled, aiText } from "@/lib/ai";
 import { scorePost } from "@/lib/score";
+import { requireLeadAccess, seesAll } from "@/lib/access";
 import { requireMember } from "@/lib/session";
 import { logActivity } from "@/lib/activity";
 import { whiteContrast } from "@/lib/brand";
+import { assignTo, pickBde } from "@/lib/assign";
 import { pollSources } from "@/lib/sources";
 
 const STATUSES = ["new", "contacted", "replied", "won", "lost"] as const;
@@ -28,8 +30,15 @@ function back(formData: FormData, msg: string, kind: "ok" | "error" = "ok"): nev
 export async function setStatus(formData: FormData) {
   const me = await requireMember();
   const id = Id.parse(formData.get("id"));
+  await requireLeadAccess(me, id);
   const status = z.enum(STATUSES).parse(formData.get("status"));
-  must(await sb().from("leads").update({ status }).eq("id", id));
+  const now = new Date().toISOString();
+  must(
+    await sb()
+      .from("leads")
+      .update({ status, ...(status === "contacted" ? { contacted_at: now } : {}), ...(status === "won" ? { won_at: now } : {}) })
+      .eq("id", id),
+  );
   await logActivity(me, "status", { target: `lead ${id}`, detail: status });
   back(formData, `Moved to ${status}.`);
 }
@@ -37,6 +46,7 @@ export async function setStatus(formData: FormData) {
 export async function saveNotes(formData: FormData) {
   const me = await requireMember();
   const id = Id.parse(formData.get("id"));
+  await requireLeadAccess(me, id);
   const notes = z.string().max(5000).parse(formData.get("notes") ?? "");
   must(await sb().from("leads").update({ notes }).eq("id", id));
   await logActivity(me, "notes", { target: `lead ${id}`, detail: notes.slice(0, 300) });
@@ -54,6 +64,7 @@ export async function deleteLead(formData: FormData) {
 export async function draftReply(formData: FormData) {
   const me = await requireMember();
   const id = Id.parse(formData.get("id"));
+  await requireLeadAccess(me, id);
   const lead = must(await sb().from("leads").select("*").eq("id", id).maybeSingle()) as Lead | null;
   if (!lead) back(formData, "That lead is gone.", "error");
   const first = (lead.author ?? "").replace(/^(dr\.?|mr\.?|ms\.?|mrs\.?)\s+/i, "").split(/\s+/)[0] || "there";
@@ -112,6 +123,7 @@ export async function checkNow(formData: FormData) {
 }
 
 const Settings = z.object({
+  auto_assign: z.enum(["on", "off"]).default("off"),
   searches: z.string().max(5000),
   watched_profiles: z.string().max(5000),
   subreddits: z.string().max(2000),
@@ -150,9 +162,11 @@ export async function addManual(formData: FormData) {
 export async function assignLead(formData: FormData) {
   const me = await requireMember();
   const id = Id.parse(formData.get("id"));
+  await requireLeadAccess(me, id);
   const raw = String(formData.get("member") ?? "");
   const to = raw === "me" ? (me?.id ?? null) : raw ? z.string().uuid().parse(raw) : null;
-  must(await sb().from("leads").update({ assigned_to: to }).eq("id", id));
+  if (!seesAll(me) && to && to !== me?.id) back(formData, "Only admins can give a lead to a named person. Use Give to a BDE.", "error");
+  await assignTo(id, to);
   await logActivity(me, "assign", { target: `lead ${id}`, detail: to ?? "nobody" });
   back(formData, to ? "Lead assigned." : "Lead is now unassigned.");
 }
@@ -189,4 +203,45 @@ export async function saveBranding(formData: FormData) {
   await setSettings({ ...r.data, brand_color: r.data.brand_color.toUpperCase(), ...(logo_url ? { logo_url } : {}) });
   await logActivity(me, "settings", { detail: `Branding: ${r.data.brand_first} ${r.data.brand_second}, ${r.data.brand_color}${logo_url ? ", new logo" : ""}` });
   back(formData, "Branding saved.");
+}
+
+/** Gives the lead to the BDE with the fewest open leads. */
+export async function handToBde(formData: FormData) {
+  const me = await requireMember();
+  const id = Id.parse(formData.get("id"));
+  await requireLeadAccess(me, id);
+  const bde = await pickBde();
+  if (!bde) back(formData, "There are no BDEs yet. Set someone's job to BDE on the Team page.", "error");
+  await assignTo(id, bde.id);
+  await logActivity(me, "assign", { target: `lead ${id}`, detail: `Handed to BDE ${bde.email}` });
+  back(formData, `Given to ${bde.name || bde.email}.`);
+}
+
+/** Date to follow up on this lead. Empty clears it. */
+export async function setFollowUp(formData: FormData) {
+  const me = await requireMember();
+  const id = Id.parse(formData.get("id"));
+  await requireLeadAccess(me, id);
+  const raw = String(formData.get("follow_up_at") ?? "");
+  const date = raw ? z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(raw) : null;
+  must(await sb().from("leads").update({ follow_up_at: date }).eq("id", id));
+  await logActivity(me, "status", { target: `lead ${id}`, detail: date ? `Follow up on ${date}` : "Follow up cleared" });
+  back(formData, date ? "Follow up date saved." : "Follow up date cleared.");
+}
+
+/** A member's own search phrases and watched profiles, checked by their extension on top of the team's. */
+export async function saveMySearches(formData: FormData) {
+  const me = await requireMember();
+  if (!me) back(formData, "Sign in to save your own searches.", "error");
+  const r = z.object({ searches: z.string().max(3000), watched_profiles: z.string().max(3000) }).safeParse({
+    searches: formData.get("searches") ?? "",
+    watched_profiles: formData.get("watched_profiles") ?? "",
+  });
+  if (!r.success) back(formData, "That list is too long.", "error");
+  const clean = (v: string) => v.replace(/\r/g, "").split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 30).join("\n");
+  const bad = clean(r.data.watched_profiles).split("\n").filter((u) => u && !/^https:\/\/(www\.)?linkedin\.com\/in\/[^/]+\/?/.test(u));
+  if (bad.length) back(formData, `These are not LinkedIn profile links: ${bad.slice(0, 2).join(", ")}`, "error");
+  must(await sb().from("members").update({ searches: clean(r.data.searches), watched_profiles: clean(r.data.watched_profiles) }).eq("id", me.id));
+  await logActivity(me, "settings", { detail: "Updated my own searches" });
+  back(formData, "Your searches are saved. Your extension uses them from its next check.");
 }

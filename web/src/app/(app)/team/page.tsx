@@ -1,5 +1,6 @@
 import { createTeam, deleteTeam, invite, newKey, removeMember, renameTeam, setAccess, updateMember } from "./actions";
 import Link from "next/link";
+import { JOB_WORDS } from "@/components/leads";
 import { PROVIDER_WORDS, ProviderLogo } from "@/components/provider-logo";
 import { timeAgo } from "@/components/shell/app-shell";
 import { Flash } from "@/components/ui/flash";
@@ -9,16 +10,17 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { THead, Table, Td, Th, Tr } from "@/components/ui/table";
 import { must, sb } from "@/lib/db";
 import { appUrl, providerEnabled } from "@/lib/oauth";
-import { authEnabled, can, requireMember, type Member } from "@/lib/session";
+import { authEnabled, requireMember, type Member } from "@/lib/session";
 
 type Team = { id: string; name: string };
 
 const ROLE_WORDS: Record<string, string> = { owner: "Owner", admin: "Admin", member: "Member" };
 const ROLE_HELP = "Owner: everything. Admin: invites people, edits searches, deletes leads. Member: works leads.";
+const JOB_HELP = "Lead generators find and qualify leads. BDEs get hot leads handed to them and follow up.";
 
 export default async function TeamPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const me = await requireMember();
-  const admin = !me || can(me, "admin");
+  const me = await requireMember("admin");
+  const admin = true;
   const owner = !me || me.role === "owner";
   const [members, teams, assigned] = await Promise.all([
     sb().from("members").select("*").order("created_at").then((r) => must(r) as Member[]),
@@ -110,7 +112,16 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
                   ))}
                 </Select>
               </Field>
-              <Field label="Team" htmlFor="team_id" optional>
+              <Field label="Job" htmlFor="job" hint={JOB_HELP}>
+                <Select id="job" name="job" defaultValue="lead_generator">
+                  {Object.entries(JOB_WORDS).map(([k, v]) => (
+                    <option key={k} value={k}>
+                      {v}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Team" htmlFor="team_id" optional hint="Pick a team, or type a new team name below.">
                 <Select id="team_id" name="team_id" defaultValue="">
                   <option value="">No team</option>
                   {teams.map((t) => (
@@ -119,6 +130,9 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
                     </option>
                   ))}
                 </Select>
+              </Field>
+              <Field label="Or create a new team" htmlFor="new_team" optional hint="Leave empty to use the team picked above.">
+                <Input id="new_team" name="new_team" placeholder="For example India sales" maxLength={60} />
               </Field>
             </FormGrid>
             <SubmitButton pendingText="Inviting...">Invite</SubmitButton>
@@ -190,6 +204,16 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
                           </option>
                         ))}
                       </select>
+                      <label className="sr-only" htmlFor={`job-${m.id}`}>
+                        Job for {m.email}
+                      </label>
+                      <select id={`job-${m.id}`} name="job" defaultValue={m.job} className="h-11 rounded-xl border border-input bg-background px-2 text-[14px]">
+                        {Object.entries(JOB_WORDS).map(([k, v]) => (
+                          <option key={k} value={k}>
+                            {v}
+                          </option>
+                        ))}
+                      </select>
                       <label className="sr-only" htmlFor={`team-${m.id}`}>
                         Team for {m.email}
                       </label>
@@ -208,6 +232,7 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
                   ) : (
                     <div className="flex flex-wrap gap-1.5">
                       <Badge tone={m.role === "owner" ? "ink" : m.role === "admin" ? "blue" : "neutral"}>{ROLE_WORDS[m.role]}</Badge>
+                      <Badge>{JOB_WORDS[m.job]}</Badge>
                       {m.team_id ? <Badge>{teamName.get(m.team_id)}</Badge> : null}
                     </div>
                   )}

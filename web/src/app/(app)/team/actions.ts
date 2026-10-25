@@ -14,6 +14,19 @@ function done(msg: string, kind: "ok" | "error" = "ok"): never {
 }
 
 const Role = z.enum(["owner", "admin", "member"]);
+const Job = z.enum(["lead_generator", "bde", "manager", "other"]);
+
+/** Uses the chosen team, or creates the new one typed into the invite form. */
+async function teamFrom(formData: FormData): Promise<string | null> {
+  const typed = String(formData.get("new_team") ?? "").trim();
+  if (typed) {
+    if (typed.length < 2 || typed.length > 60) done("Team names need 2 to 60 characters.", "error");
+    const found = must(await sb().from("teams").select("id").ilike("name", typed).maybeSingle()) as { id: string } | null;
+    if (found) return found.id;
+    return (must(await sb().from("teams").insert({ name: typed }).select("id").single()) as { id: string }).id;
+  }
+  return TeamId.parse(formData.get("team_id") ?? "");
+}
 const TeamId = z.union([z.literal(""), z.string().uuid()]).transform((v) => v || null);
 
 async function target(id: unknown): Promise<Member> {
@@ -34,15 +47,16 @@ function mayChange(me: Member | null, who: Member, newRole?: string) {
 export async function invite(formData: FormData) {
   const me = await requireMember("admin");
   const parsed = z
-    .object({ email: z.string().trim().toLowerCase().email(), name: z.string().trim().max(120), role: Role, team_id: TeamId, login_with: z.enum(["google", "zoho"]) })
-    .safeParse(Object.fromEntries(formData));
+    .object({ email: z.string().trim().toLowerCase().email(), name: z.string().trim().max(120), role: Role, login_with: z.enum(["google", "zoho"]), job: Job })
+    .safeParse({ email: formData.get("email"), name: formData.get("name") ?? "", role: formData.get("role"), login_with: formData.get("login_with"), job: formData.get("job") ?? "other" });
   if (!parsed.success) done("Enter a valid email address.", "error");
-  const { email, name, role, team_id, login_with } = parsed.data;
+  const { email, name, role, login_with, job } = parsed.data;
   if (!providerEnabled(login_with)) done(`${login_with === "zoho" ? "Zoho" : "Google"} sign in is not set up yet.`, "error");
   if (role !== "member" && me && me.role !== "owner") done("Only the owner can add admins.", "error");
   const exists = must(await sb().from("members").select("id").eq("email", email).maybeSingle());
   if (exists) done(`${email} is already on the team.`, "error");
-  must(await sb().from("members").insert({ email, name: name || null, role, team_id, login_with, status: "invited", invited_by: me?.id ?? null }));
+  const team_id = await teamFrom(formData);
+  must(await sb().from("members").insert({ email, name: name || null, role, team_id, login_with, job, status: "invited", invited_by: me?.id ?? null }));
   await logActivity(me, "invite", { target: email, detail: `${role}, signs in with ${login_with}` });
   done(`${email} can now sign in with ${login_with === "zoho" ? "Zoho" : "Google"}.`);
 }
@@ -53,9 +67,10 @@ export async function updateMember(formData: FormData) {
   const role = Role.parse(formData.get("role"));
   const team_id = TeamId.parse(formData.get("team_id") ?? "");
   const login_with = z.enum(["google", "zoho"]).parse(formData.get("login_with") ?? who.login_with);
+  const job = Job.parse(formData.get("job") ?? who.job);
   if (!mayChange(me, who, role)) done("Only the owner can change admins and owners.", "error");
   if (who.id === me?.id && role !== who.role) done("You cannot change your own role.", "error");
-  must(await sb().from("members").update({ role, team_id, login_with }).eq("id", who.id));
+  must(await sb().from("members").update({ role, team_id, login_with, job }).eq("id", who.id));
   await logActivity(me, "member_change", { target: who.email, detail: `${role}, ${login_with}, team ${team_id ?? "none"}` });
   done(`Saved ${who.name || who.email}.`);
 }

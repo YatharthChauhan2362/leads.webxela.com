@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "Yatri Leads",
-  "version": "0.8.0",
+  "name": "Leads by Yatri Cloud",
+  "version": "0.9.0",
   "description": "Saves LinkedIn posts from people who need a project built, and their public contact info, to Yatri Leads.",
   "permissions": ["storage", "alarms", "tabs", "cookies", "scripting"],
   "host_permissions": [
@@ -21,7 +21,7 @@
     }
   ],
   "action": {
-    "default_title": "Yatri Leads",
+    "default_title": "Find leads, email and phone",
     "default_popup": "popup.html",
     "default_icon": { "16": "icon16.png", "48": "icon48.png", "128": "icon128.png" }
   },

@@ -7,6 +7,10 @@
   window.__yatriLeadsLoaded = true;
   const sent = new Set();
   let enabled = true;
+  // The app's name and colour, so the buttons on LinkedIn match it.
+  let BRAND = { first: "Yatri", second: "Leads", color: "#0080FF" };
+  chrome.storage.local.get({ brand: null }, (s) => s.brand && (BRAND = s.brand));
+  chrome.storage.onChanged.addListener((c) => c.brand?.newValue && (BRAND = c.brand.newValue));
 
   chrome.storage.local.get({ capture: true }, (s) => {
     enabled = s.capture;
@@ -293,11 +297,11 @@
     :host { all: initial; }
     * { box-sizing: border-box; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
     .bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 12px; border-top: 1px solid #e6e6e6; border-bottom: 1px solid #e6e6e6; background: #fff; }
-    .tag { font-size: 12px; font-weight: 700; color: #0080ff; margin-right: 4px; }
+    .tag { font-size: 12px; font-weight: 700; color: var(--b); margin-right: 4px; }
     button { height: 32px; padding: 0 12px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid #e6e6e6; background: #fff; color: #171717; }
-    button:hover { background: #0080ff; color: #fff; border-color: #0080ff; }
-    button.primary { background: #0080ff; color: #fff; border-color: #0080ff; }
-    button.primary:hover { background: #0070e0; }
+    button:hover { background: var(--b); color: #fff; border-color: var(--b); }
+    button.primary { background: var(--b); color: #fff; border-color: var(--b); }
+    button.primary:hover { filter: brightness(0.9); }
     button:disabled { opacity: .6; cursor: default; }
     .out { width: 100%; font-size: 13px; color: #171717; line-height: 1.5; }
     .out:empty { display: none; }
@@ -309,7 +313,7 @@
     .muted { color: #616161; }
     .err { color: #bf2121; }
     .panel { position: fixed; right: 16px; bottom: 16px; z-index: 2147483000; width: 300px; background: #fff; border: 1px solid #e6e6e6; border-radius: 16px; box-shadow: 0 4px 16px rgba(0,0,0,.08); padding: 14px; }
-    .panel h3 { margin: 0 0 2px; font-size: 15px; } .panel h3 b { color: #0080ff; }
+    .panel h3 { margin: 0 0 2px; font-size: 15px; } .panel h3 b { color: var(--b); }
     .panel .who { font-size: 13px; color: #616161; margin-bottom: 10px; }
     .panel .btns { display: grid; gap: 6px; }
     .panel .btns button { width: 100%; height: 38px; }
@@ -318,6 +322,7 @@
   `;
 
   function mount(host, html) {
+    host.style.setProperty("--b", BRAND.color || "#0080FF");
     const root = host.attachShadow({ mode: "open" });
     root.innerHTML = `<style>${CSS}</style>${html}`;
     return root;
@@ -327,7 +332,7 @@
 
   function showContacts(out, res) {
     if (!res || res.error) {
-      out.innerHTML = `<span class="err">${esc(res?.error || "Could not reach Yatri Leads. Is the app running?")}</span>`;
+      out.innerHTML = `<span class="err">${esc(res?.error || "Could not reach the leads app. Open the extension and check it says Connected.")}</span>`;
       return;
     }
     const c = res.contacts || { emails: [], phones: [], websites: [] };
@@ -382,7 +387,7 @@
       box.prepend(host);
       const root = mount(
         host,
-        `<div class="bar"><span class="tag">Yatri Leads</span>
+        `<div class="bar"><span class="tag">${esc(BRAND.first)} ${esc(BRAND.second)}</span>
           ${post.authorUrl && /\/in\//.test(post.authorUrl) ? '<button class="primary" data-a="find">Find email and phone</button>' : ""}
           <button data-a="save">Save lead</button><div class="out"></div></div>`,
       );
@@ -425,7 +430,7 @@
     const root = mount(
       host,
       `<div class="panel"><button class="close" data-a="hide">Hide</button>
-        <h3>Yatri <b>Leads</b></h3><div class="who">${esc(name)}</div>
+        <h3>${esc(BRAND.first)} <b>${esc(BRAND.second)}</b></h3><div class="who">${esc(name)}</div>
         <div class="btns"><button class="primary" data-a="find">Find email and phone</button>
         <button data-a="posts">Show their recent posts</button></div>
         <div class="out" style="margin-top:8px"></div></div>`,

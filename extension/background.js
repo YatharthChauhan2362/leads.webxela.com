@@ -1,4 +1,4 @@
-// Sends posts to the Yatri Leads server, and runs watch mode on a timer.
+// Sends posts to the leads app, runs the 30 minute check, and keeps the app's name and colour for the popup and page buttons.
 
 const DEFAULTS = {
   server: "https://leads.webxela.com",
@@ -30,7 +30,8 @@ async function bump(fields) {
   const st = s.stats.day === today() ? s.stats : { day: today(), sent: 0, added: 0, views: 0 };
   for (const [k, v] of Object.entries(fields)) st[k] = (st[k] || 0) + v;
   await set({ stats: st });
-  chrome.action.setBadgeBackgroundColor({ color: "#0080FF" });
+  const { brand } = await get({ brand: null });
+  chrome.action.setBadgeBackgroundColor({ color: brand?.color || "#0080FF" });
   chrome.action.setBadgeText({ text: st.added ? String(st.added) : "" });
   return st;
 }
@@ -49,6 +50,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
       });
     return true;
   }
+  if (msg.type === "me") {
+    refreshMe().then(reply);
+    return true;
+  }
   if (msg.type === "activity") {
     // Copies and contact links made in the extension go to the app's Activity log.
     api("/api/activity", { method: "POST", body: JSON.stringify({ action: msg.action, target: msg.target, detail: msg.detail, path: msg.path }) })
@@ -65,12 +70,28 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
     return true;
   }
   if (msg.type === "settings-changed") {
-    setupAlarm().then(() => reply({ ok: true }));
+    setupAlarm()
+      .then(refreshMe)
+      .then((r) => reply(r));
     return true;
   }
 });
 
+/** Asks the app who this key belongs to, and its name and colour. */
+async function refreshMe() {
+  try {
+    const r = await api("/api/me");
+    await set({ me: r.member, brand: r.brand, connected: true, connectError: "" });
+    return { connected: true, ...r };
+  } catch (e) {
+    const msg = /401/.test(e.message) ? "That key is not right. Copy it again from the app." : "Cannot reach the app. Check the App address.";
+    await set({ connected: false, connectError: msg });
+    return { connected: false, error: msg };
+  }
+}
+
 async function setupAlarm() {
+  refreshMe();
   const s = await get(DEFAULTS);
   await chrome.alarms.clear("watch");
   if (s.watch) chrome.alarms.create("watch", { periodInMinutes: Math.max(15, Number(s.every) || 30), delayInMinutes: 1 });

@@ -23,16 +23,16 @@ export async function POST(req: Request) {
     const r = PostIn.safeParse(p);
     return r.success ? [r.data] : [];
   });
+  const who = await apiMember(req);
   let profiles = 0;
   for (const p of parsed.data.profiles) {
     const r = ProfileIn.safeParse(p);
     if (r.success) {
-      await saveProfile(r.data);
+      await saveProfile(r.data, who?.id);
       profiles++;
     }
   }
 
-  const who = await apiMember(req);
   const res = await ingestPosts(posts, { capturedBy: who?.id });
   if (res.added || profiles) await logActivity(who, "capture", { detail: `${res.added} new posts, ${profiles} profiles` });
   if (posts.length) await logRun("extension", res.found, res.added);
