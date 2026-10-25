@@ -62,7 +62,8 @@ async function api(p, body) {
 
 async function openBrowser(headless) {
   fs.mkdirSync(PROFILE_DIR, { recursive: true });
-  return chromium.launchPersistentContext(PROFILE_DIR, { channel: "chrome", headless, viewport: { width: 1280, height: 900 } });
+  // chromiumSandbox keeps Chrome's normal security sandbox on (and removes the --no-sandbox warning bar).
+  return chromium.launchPersistentContext(PROFILE_DIR, { channel: "chrome", headless, chromiumSandbox: true, viewport: { width: 1280, height: 900 } });
 }
 
 async function signedIn(ctx) {

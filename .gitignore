@@ -16,3 +16,5 @@ web/supabase/.temp/
 web/supabase/.branches/
 web/test-results/
 web/playwright-report/
+.vercel
+.env*.local
