@@ -5,7 +5,6 @@ import { getSettings, lines, must, sb, type Lead, type Profile } from "./db";
 import { extractEmails, extractPhones, mergeList } from "./contacts";
 import { scorePost } from "./score";
 import { sendLeadEmail } from "./alerts";
-import { assignTo, pickBde } from "./assign";
 import { notifyHotLead } from "./notify";
 import { contactsFromWebsites } from "./website";
 import { fallbackPhoto, storePhoto } from "./photos";
@@ -198,15 +197,7 @@ export async function ingestPosts(posts: PostIn[], opts: { force?: boolean; capt
       if (rows[0].score >= alertScore) hot.push(rows[0]);
     }
   }
-  // Hand new hot leads to BDEs when the admin switched that on.
-  if (hot.length && settings.auto_assign === "on") {
-    for (const l of hot) {
-      if (l.assigned_to) continue;
-      const bde = await pickBde();
-      if (!bde) break;
-      await assignTo(l.id, bde.id);
-    }
-  }
+  // Nothing is given to anyone automatically. People pick and hand out leads themselves.
   if (hot.length && settings.notify_hot === "on") {
     for (const l of hot) await notifyHotLead({ ...l, assigned_to: l.assigned_to }).catch(() => {});
   }

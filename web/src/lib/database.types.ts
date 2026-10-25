@@ -119,6 +119,54 @@ export type Database = {
         }
         Relationships: []
       }
+      lead_events: {
+        Row: {
+          at: string
+          from_value: string | null
+          id: number
+          kind: string
+          lead_id: number
+          member_id: string | null
+          member_name: string | null
+          to_value: string | null
+        }
+        Insert: {
+          at?: string
+          from_value?: string | null
+          id?: never
+          kind: string
+          lead_id: number
+          member_id?: string | null
+          member_name?: string | null
+          to_value?: string | null
+        }
+        Update: {
+          at?: string
+          from_value?: string | null
+          id?: never
+          kind?: string
+          lead_id?: number
+          member_id?: string | null
+          member_name?: string | null
+          to_value?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_events_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_events_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       leads: {
         Row: {
           alerted: boolean

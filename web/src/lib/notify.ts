@@ -46,7 +46,7 @@ export async function emailPerson(to: string, subject: string, lines: string[], 
       to,
       subject,
       text: lines.join("\n"),
-      html: `<div style="font-family:Arial,sans-serif;font-size:14px;color:#171717">${lines.map((l) => `<p>${esc(l)}</p>`).join("")}${links ? `<p>${links}</p>` : ""}<p><a href="${appUrl()}/me">Open My work</a></p></div>`,
+      html: `<div style="font-family:Arial,sans-serif;font-size:14px;color:#171717">${lines.map((l) => `<p>${esc(l)}</p>`).join("")}${links ? `<p>${links}</p>` : ""}<p><a href="${appUrl()}/">Open your leads</a></p></div>`,
     });
     return true;
   } catch (err) {

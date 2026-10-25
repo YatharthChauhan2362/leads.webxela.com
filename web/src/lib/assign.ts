@@ -2,7 +2,7 @@ import "server-only";
 import { must, sb } from "./db";
 import { emailPerson, notify } from "./notify";
 
-const OPEN = ["new", "contacted", "replied"];
+const OPEN = ["new", "contacted", "interested", "proposal", "contract"];
 
 /** The active BDE with the fewest open leads, so work is spread evenly. Null when there are no BDEs. */
 export async function pickBde(): Promise<{ id: string; email: string; name: string | null } | null> {

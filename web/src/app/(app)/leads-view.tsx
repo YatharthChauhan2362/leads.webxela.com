@@ -10,15 +10,17 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { THead, Table, Td, Th, Tr } from "@/components/ui/table";
 import { getSetting, hoursAgo, must, sb, type Lead } from "@/lib/db";
 import { currentMember } from "@/lib/session";
-import { myLeadsFilter, seesAll } from "@/lib/access";
+import { myLeadsFilter, ownedByFilter, seesAll } from "@/lib/access";
 
 type SP = { [key: string]: string | string[] | undefined };
 
 const STATUS_TABS = [
   { key: "new", label: "New" },
   { key: "contacted", label: "Contacted" },
-  { key: "replied", label: "Replied" },
-  { key: "won", label: "Won" },
+  { key: "interested", label: "Interested" },
+  { key: "proposal", label: "Proposal sent" },
+  { key: "contract", label: "Contract signed" },
+  { key: "paid", label: "Payment received" },
   { key: "lost", label: "Lost" },
   { key: "all", label: "All" },
 ];
@@ -35,12 +37,12 @@ export async function LeadsView({ searchParams, mode }: { searchParams: Promise<
   const sp = await searchParams;
   const finds = mode === "finds";
   const base = finds ? "/finds" : "/";
-  const status = finds ? "all" : str(sp.status) || "new";
+  const status = finds ? "all" : str(sp.status) || "all";
   const source = str(sp.source);
   const q = str(sp.q).trim();
-  // Cold posts are hidden unless "Any score" is picked.
-  const min = sp.min === undefined ? 40 : Number(str(sp.min)) || 0;
-  const matchesOnly = str(sp.matches) === "1";
+  // Cold finds are hidden unless "Any score" is picked. Leads are picked by people, so score does not filter them.
+  const min = finds ? (sp.min === undefined ? 40 : Number(str(sp.min)) || 0) : 0;
+  const matchesOnly = finds && str(sp.matches) === "1";
   const contact = str(sp.contact) === "1";
   const sort = str(sp.sort) === "newest" ? "newest" : "best";
   const who = str(sp.who);
@@ -54,9 +56,10 @@ export async function LeadsView({ searchParams, mode }: { searchParams: Promise<
   if (status !== "all") query = query.eq("status", status);
   if (source) query = query.eq("source", source);
   if (who === "me" && me) query = query.eq("assigned_to", me.id);
-  else if (who === "followups" && me) query = query.eq("assigned_to", me.id).lte("follow_up_at", todayDate);
+  else if (who === "added" && me) query = query.eq("captured_by", me.id);
+  else if (who === "followups") query = query.lte("follow_up_at", todayDate).not("status", "in", "(paid,lost)");
   else if (who === "none" && all) query = query.is("assigned_to", null);
-  else if (/^[0-9a-f-]{36}$/.test(who)) query = query.eq("assigned_to", who);
+  else if (/^[0-9a-f-]{36}$/.test(who) && all) query = query.or(ownedByFilter(who));
   if (contact) query = query.or("emails.neq.,phones.neq.,work_email.not.is.null");
   if (matchesOnly) query = query.not("matched_search", "is", null);
   if (q) {
@@ -69,16 +72,16 @@ export async function LeadsView({ searchParams, mode }: { searchParams: Promise<
       ? query.order("captured_at", { ascending: false })
       : query.order("captured_day", { ascending: false }).order("score", { ascending: false }).order("captured_at", { ascending: false });
 
-  type Stats = { today: number; hot: number; with_contact: number; total: number; by_status: Record<string, number> };
+  type Stats = { today: number; hot: number; with_contact: number; due: number; total: number; by_status: Record<string, number> };
   const [leads, stats, people] = await Promise.all([
     query.limit(300).then((r) => must(r) as Lead[]),
     getSetting("alert_score").then(async (alert): Promise<Stats> => {
       // Numbers for this list only. A member's numbers count only their own.
-      let statsQuery = sb().from("leads").select("status, score, captured_at, emails, phones, work_email").eq("is_lead", !finds).limit(20000);
+      let statsQuery = sb().from("leads").select("status, score, captured_at, emails, phones, work_email, follow_up_at").eq("is_lead", !finds).limit(20000);
       if (!all && me) statsQuery = statsQuery.or(myLeadsFilter(me));
       const mine = must(await statsQuery) as Pick<
         Lead,
-        "status" | "score" | "captured_at" | "emails" | "phones" | "work_email"
+        "status" | "score" | "captured_at" | "emails" | "phones" | "work_email" | "follow_up_at"
       >[];
       const since = hoursAgo(24);
       const by_status: Record<string, number> = {};
@@ -87,18 +90,18 @@ export async function LeadsView({ searchParams, mode }: { searchParams: Promise<
         today: mine.filter((l) => l.captured_at >= since).length,
         hot: mine.filter((l) => l.captured_at >= since && l.score >= (Number(alert) || 70)).length,
         with_contact: mine.filter((l) => l.emails || l.phones || l.work_email).length,
+        due: mine.filter((l) => l.follow_up_at && l.follow_up_at <= todayDate && l.status !== "paid" && l.status !== "lost").length,
         total: mine.length,
         by_status,
       };
     }),
-    all
-      ? sb().from("members").select("id, name, email").neq("status", "disabled").order("name").then((r) => must(r) as { id: string; name: string | null; email: string }[])
-      : Promise.resolve([] as { id: string; name: string | null; email: string }[]),
+    // Names only, so everyone can see who owns a lead.
+    sb().from("members").select("id, name, email").neq("status", "disabled").order("name").then((r) => must(r) as { id: string; name: string | null; email: string }[]),
   ]);
   const nameOf = new Map(people.map((p) => [p.id, p.name || p.email.split("@")[0]]));
   if (me) nameOf.set(me.id, "You");
   const counts = stats.by_status;
-  const { total, today, hot, with_contact: withContact } = stats;
+  const { total, today, hot, due, with_contact: withContact } = stats;
 
   const here = (over: Record<string, string>) => {
     const p = new URLSearchParams();
@@ -116,7 +119,9 @@ export async function LeadsView({ searchParams, mode }: { searchParams: Promise<
         description={
           finds
             ? "Everything collected automatically by the extension, the server and the Claude routine. Add the good ones to Leads."
-            : "The leads your team chose to work. Each one has an owner, a status and a follow up date."
+            : all
+              ? "Every lead your team is working. Pick a person to see only theirs."
+              : "Leads you added and leads given to you. Update the status as you go."
         }
         actions={
           <>
@@ -142,9 +147,17 @@ export async function LeadsView({ searchParams, mode }: { searchParams: Promise<
 
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Last 24 hours" value={today} note={finds ? "New finds" : "Leads added"} />
-        <Stat label="Hot today" value={hot} note="At or above your alert score" href={here({ min: "70", status: "all" })} />
-        <Stat label="With contact" value={withContact} note="Email or phone found" href={here({ contact: "1" })} />
-        <Stat label={finds ? "All finds" : "All leads"} value={total} note={`${counts.won ?? 0} won so far`} href={here({ status: "all" })} />
+        {finds ? (
+          <Stat label="Hot today" value={hot} note="At or above your alert score" href={here({ min: "70", status: "all" })} />
+        ) : (
+          <Stat label="Follow ups due" value={due} note="Today or overdue" href={here({ who: "followups", status: "all" })} />
+        )}
+        {finds ? (
+          <Stat label="With contact" value={withContact} note="Email or phone found" href={here({ contact: "1" })} />
+        ) : (
+          <Stat label="Contract signed" value={(counts.contract ?? 0) + (counts.paid ?? 0)} note={`${counts.paid ?? 0} paid`} href={here({ status: "contract" })} />
+        )}
+        <Stat label={finds ? "All finds" : "All leads"} value={total} note={finds ? "Collected so far" : `${counts.lost ?? 0} lost`} href={here({ status: "all" })} />
       </div>
 
       {finds ? null : (
@@ -155,7 +168,7 @@ export async function LeadsView({ searchParams, mode }: { searchParams: Promise<
       />
       )}
 
-      <form className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[1fr_150px_140px_150px_140px_auto_auto_auto]" action="/">
+      <form className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[1fr_150px_140px_150px_140px_auto_auto_auto]" action={base}>
         <input type="hidden" name="status" value={status} />
         <label className="sr-only" htmlFor="q">Search</label>
         <Input id="q" name="q" defaultValue={q} placeholder="Search posts, names, skills" />
@@ -168,24 +181,31 @@ export async function LeadsView({ searchParams, mode }: { searchParams: Promise<
             </option>
           ))}
         </Select>
-        <label className="sr-only" htmlFor="min">Score</label>
-        <Select id="min" name="min" defaultValue={String(min)}>
-          <option value="0">Any score</option>
-          <option value="40">Hide cold</option>
-          <option value="50">Warm and hot</option>
-          <option value="70">Hot only</option>
-        </Select>
+        {finds ? (
+          <>
+            <label className="sr-only" htmlFor="min">Score</label>
+            <Select id="min" name="min" defaultValue={String(min)}>
+              <option value="0">Any score</option>
+              <option value="40">Hide cold</option>
+              <option value="50">Warm and hot</option>
+              <option value="70">Hot only</option>
+            </Select>
+          </>
+        ) : null}
         <label className="sr-only" htmlFor="who">Assigned to</label>
         <Select id="who" name="who" defaultValue={who}>
-          <option value="">{all ? "Anyone" : "All my leads"}</option>
-          {me ? <option value="me">Assigned to me</option> : null}
-          {me ? <option value="followups">Follow-ups due</option> : null}
+          <option value="">{all ? "Everyone" : "All my leads"}</option>
+          {me ? <option value="me">Given to me</option> : null}
+          {me ? <option value="added">Added by me</option> : null}
+          <option value="followups">Follow ups due</option>
           {all ? <option value="none">Not assigned</option> : null}
-          {people.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name || p.email}
-            </option>
-          ))}
+          {all
+            ? people.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name || p.email}
+                </option>
+              ))
+            : null}
         </Select>
         <label className="sr-only" htmlFor="sort">Sort</label>
         <Select id="sort" name="sort" defaultValue={sort}>
@@ -196,20 +216,22 @@ export async function LeadsView({ searchParams, mode }: { searchParams: Promise<
           <input type="checkbox" name="contact" value="1" defaultChecked={contact} className="size-5 accent-primary" />
           Has contact
         </label>
-        <label className="flex h-12 items-center gap-2 rounded-xl border border-input bg-background px-3 text-[15px] whitespace-nowrap">
-          <input type="checkbox" name="matches" value="1" defaultChecked={matchesOnly} className="size-5 accent-primary" />
-          Matches my searches
-        </label>
+        {finds ? (
+          <label className="flex h-12 items-center gap-2 rounded-xl border border-input bg-background px-3 text-[15px] whitespace-nowrap">
+            <input type="checkbox" name="matches" value="1" defaultChecked={matchesOnly} className="size-5 accent-primary" />
+            Matches my searches
+          </label>
+        ) : null}
         <button className={buttonClass("secondary", "md", "h-12")}>Filter</button>
       </form>
 
       {leads.length === 0 ? (
         <EmptyState
           title={finds ? "No daily finds here" : "No leads here yet"}
-          description={finds ? "The extension, the server and the Claude routine add finds here as they collect posts." : "Add finds from Daily finds, save from Search, or add one with New lead."}
+          description={finds ? "The extension, the server and the Claude routine add finds here as they collect posts." : "Add a lead from a call, an email or LinkedIn, or change the filters above."}
           action={
-            <Link href={finds ? "/extension" : "/finds"} className={buttonClass("primary")}>
-              {finds ? "Set up the extension" : "Open daily finds"}
+            <Link href={finds ? "/extension" : "/leads/new"} className={buttonClass("primary")}>
+              {finds ? "Set up the extension" : "New lead"}
             </Link>
           }
         />
@@ -239,12 +261,12 @@ export async function LeadsView({ searchParams, mode }: { searchParams: Promise<
                 <Th className="w-10">
                   <span className="sr-only">Select</span>
                 </Th>
-                <Th>Score</Th>
+                {finds ? <Th>Score</Th> : null}
                 <Th>Person</Th>
                 <Th>What they need</Th>
                 <Th>Contact</Th>
-                <Th>Found</Th>
-                <Th>Assigned</Th>
+                <Th>{finds ? "Found" : "Added"}</Th>
+                <Th>Owner</Th>
                 <Th>{finds ? "Action" : "Status"}</Th>
               </tr>
             </THead>
@@ -257,12 +279,14 @@ export async function LeadsView({ searchParams, mode }: { searchParams: Promise<
                       <input type="checkbox" name="ids" value={l.id} form="bulk" className="size-5 accent-primary" />
                     </label>
                   </Td>
-                  <Td className="align-top">
-                    <div className="flex flex-col items-start gap-1">
-                      <ScoreBadge score={l.score} />
-                      {l.urgency === "urgent" ? <Badge tone="red">Urgent</Badge> : l.urgency === "soon" ? <Badge tone="amber">Soon</Badge> : null}
-                    </div>
-                  </Td>
+                  {finds ? (
+                    <Td className="align-top">
+                      <div className="flex flex-col items-start gap-1">
+                        <ScoreBadge score={l.score} />
+                        {l.urgency === "urgent" ? <Badge tone="red">Urgent</Badge> : l.urgency === "soon" ? <Badge tone="amber">Soon</Badge> : null}
+                      </div>
+                    </Td>
+                  ) : null}
                   <Td className="min-w-[200px] align-top">
                     <Link href={`/leads/${l.id}`} className="font-semibold hover:text-primary hover:underline">
                       {l.author || "Unknown"}
@@ -294,7 +318,7 @@ export async function LeadsView({ searchParams, mode }: { searchParams: Promise<
                     ) : null}
                   </Td>
                   <Td className="align-top text-[14px] whitespace-nowrap">
-                    {l.assigned_to ? (nameOf.get(l.assigned_to) ?? (all ? "Former member" : "A teammate")) : <span className="text-muted-foreground">Nobody</span>}
+                    {(l.assigned_to ?? l.captured_by) ? (nameOf.get((l.assigned_to ?? l.captured_by)!) ?? "Former member") : <span className="text-muted-foreground">Nobody</span>}
                     {l.follow_up_at ? (
                       <p className={`text-[13px] ${l.follow_up_at <= todayDate ? "font-semibold text-danger" : "text-muted-foreground"}`}>
                         Follow up {new Date(l.follow_up_at + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" })}

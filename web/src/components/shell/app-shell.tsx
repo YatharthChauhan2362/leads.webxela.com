@@ -12,28 +12,45 @@ const ROLE_WORDS: Record<string, string> = { owner: "Owner", admin: "Admin", mem
 
 function nav(newCount: number, member: Member | null, unread = 0, findCount = 0): NavGroup[] {
   const admin = !member || can(member, "admin");
+  if (!admin) {
+    // Members get only what they need to work their leads.
+    return [
+      {
+        label: "Work",
+        items: [
+          { href: "/", label: "Leads", count: newCount },
+          { href: "/notifications", label: "Notifications", count: unread },
+          { href: "/extension", label: "Chrome extension" },
+        ],
+      },
+    ];
+  }
   return [
     {
-      label: "Leads",
+      label: "Work",
       items: [
-        { href: "/me", label: "My work" },
-        { href: "/notifications", label: "Notifications", count: unread },
-        { href: "/search", label: "Search" },
+        { href: "/dashboard", label: "Dashboard" },
         { href: "/", label: "Leads", count: newCount },
-        { href: "/finds", label: "Daily finds", count: findCount },
-        { href: "/people", label: "People" },
+        { href: "/notifications", label: "Notifications", count: unread },
       ],
     },
     {
-      label: "Setup",
+      label: "Finding leads",
       items: [
-        ...(admin ? [{ href: "/linkedin", label: "LinkedIn account" }] : []),
+        { href: "/finds", label: "Daily finds", count: findCount },
+        { href: "/search", label: "Search" },
+        { href: "/people", label: "People" },
         { href: "/extension", label: "Chrome extension" },
-        ...(admin ? [{ href: "/preferences", label: "Preferences" }] : []),
-        ...(admin ? [{ href: "/engines", label: "Search engines" }] : []),
-        ...(admin ? [{ href: "/settings", label: "Searches and branding" }] : []),
-        ...(admin ? [{ href: "/team", label: "Team" }] : []),
-        ...(admin ? [{ href: "/activity", label: "Activity" }] : []),
+      ],
+    },
+    {
+      label: "Admin",
+      items: [
+        { href: "/team", label: "Team" },
+        { href: "/activity", label: "Activity" },
+        { href: "/preferences", label: "Preferences" },
+        { href: "/engines", label: "Search engines" },
+        { href: "/settings", label: "Searches and branding" },
       ],
     },
   ];

@@ -10,14 +10,14 @@ import { Avatar, EmptyState, PageHeader, Stat } from "@/components/ui/layout";
 import { THead, Table, Td, Th, Tr } from "@/components/ui/table";
 import { must, sb, type Profile } from "@/lib/db";
 import { myLeadsFilter, seesAll } from "@/lib/access";
-import { currentMember } from "@/lib/session";
+import { requireMember } from "@/lib/session";
 
 export default async function PeoplePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = await searchParams;
   const q = typeof sp.q === "string" ? sp.q.trim() : "";
   const withContact = sp.contact === "1";
 
-  const me = await currentMember();
+  const me = await requireMember("admin");
   const all = seesAll(me);
   let query = sb().from("profiles").select("*");
   // Members only see the profiles they saved.

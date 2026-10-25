@@ -83,10 +83,9 @@ export default async function PreferencesPage({ searchParams }: { searchParams: 
             </div>
           </FormSection>
 
-          <FormSection title="Alerts and hand off">
+          <FormSection title="Alerts">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Checkbox name="notify_hot" defaultChecked={s.notify_hot === "on"} label="Alert on every hot lead" hint="Bell, desktop alert through the extension, and email to admins." />
-              <Checkbox name="auto_assign" defaultChecked={s.auto_assign === "on"} label="Give hot leads to BDEs automatically" hint="To the BDE with the fewest open leads, with an alert and email." />
             </div>
           </FormSection>
 

@@ -1,16 +1,36 @@
 import { notFound } from "next/navigation";
-import { addToLeads, assignLead, deleteLeads, draftReply, handToBde, saveNotes, setFollowUp, setStatus, updateLead } from "@/app/actions";
-import { Field, FormGrid, Input } from "@/components/ui/form";
-import { requireLeadAccess, seesAll } from "@/lib/access";
-import { currentMember } from "@/lib/session";
-import { ContactCell, SOURCES, STATUS_WORDS, ScoreBadge, list } from "@/components/leads";
+import { addToLeads, assignLead, deleteLeads, saveNotes, setFollowUp, setStatus, updateLead } from "@/app/actions";
+import { ContactCell, SOURCES, STATUS_WORDS, ScoreBadge } from "@/components/leads";
 import { timeAgo } from "@/components/shell/app-shell";
 import { buttonClass } from "@/components/ui/button";
 import { Flash } from "@/components/ui/flash";
-import { Textarea } from "@/components/ui/form";
-import { Badge, Card, CardHeader, DescriptionList, PageHeader } from "@/components/ui/layout";
+import { Field, FormGrid, Input, Textarea } from "@/components/ui/form";
+import { Badge, Card, CardHeader, PageHeader } from "@/components/ui/layout";
 import { SubmitButton } from "@/components/ui/submit-button";
-import { must, sb, type Lead, type Profile } from "@/lib/db";
+import { requireLeadAccess, seesAll } from "@/lib/access";
+import { must, sb, type Lead } from "@/lib/db";
+import { currentMember } from "@/lib/session";
+
+type Event = { id: number; member_name: string | null; kind: string; from_value: string | null; to_value: string | null; at: string };
+
+/** One line of history in plain words. */
+function said(e: Event) {
+  const word = (s: string | null) => (s ? (STATUS_WORDS[s] ?? s) : "");
+  switch (e.kind) {
+    case "created":
+      return `added this lead${e.to_value ? ` (${SOURCES[e.to_value] ?? e.to_value})` : ""}`;
+    case "status":
+      return `moved it from ${word(e.from_value)} to ${word(e.to_value)}`;
+    case "assigned":
+      return e.to_value === "Nobody" ? "removed the owner" : `gave it to ${e.to_value}`;
+    case "follow_up":
+      return e.to_value === "cleared" ? "cleared the follow up date" : `set a follow up for ${new Date(`${e.to_value}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}`;
+    case "note":
+      return "updated the notes";
+    default:
+      return "edited the details";
+  }
+}
 
 export default async function LeadPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const id = Number((await params).id);
@@ -20,10 +40,17 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
   const all = seesAll(me);
   const lead = must(await sb().from("leads").select("*").eq("id", id).maybeSingle()) as Lead | null;
   if (!lead) notFound();
-  const person = lead.author_url ? (must(await sb().from("profiles").select("*").eq("url", lead.author_url).maybeSingle()) as Profile | null) : null;
+  const [people, events] = await Promise.all([
+    // Everyone can hand a lead to a teammate, so everyone sees teammates' names. Only admins see emails elsewhere.
+    sb().from("members").select("id, name, email").neq("status", "disabled").order("name").then((r) => must(r) as { id: string; name: string | null; email: string }[]),
+    sb().from("lead_events").select("id, member_name, kind, from_value, to_value, at").eq("lead_id", id).order("at", { ascending: false }).limit(100).then((r) => must(r) as Event[]),
+  ]);
+  const nameOf = (mid: string | null) => {
+    const p = people.find((x) => x.id === mid);
+    return p ? (p.id === me?.id ? "You" : p.name || p.email.split("@")[0]) : null;
+  };
   const back = `/leads/${id}`;
-  // Only admins see the team list. Members can take the lead themselves or give it to a BDE.
-  const people = all ? (must(await sb().from("members").select("id, name, email, job").neq("status", "disabled").order("name")) as { id: string; name: string | null; email: string; job: string }[]) : [];
+  const select = "h-11 min-w-0 flex-1 rounded-xl border border-input bg-background px-3 text-[15px]";
 
   return (
     <>
@@ -40,14 +67,14 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
                 <SubmitButton pendingText="Adding...">Add to leads</SubmitButton>
               </form>
             ) : null}
-            {lead.post_url ? (
-              <a href={lead.post_url} target="_blank" rel="noreferrer" className={buttonClass("primary")}>
-                Open post
-              </a>
-            ) : null}
             {lead.author_url ? (
               <a href={lead.author_url} target="_blank" rel="noreferrer" className={buttonClass("secondary")}>
                 Open profile
+              </a>
+            ) : null}
+            {lead.post_url ? (
+              <a href={lead.post_url} target="_blank" rel="noreferrer" className={buttonClass("secondary")}>
+                Open post
               </a>
             ) : null}
           </>
@@ -55,29 +82,49 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
       />
       <Flash searchParams={searchParams} />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
         <div className="space-y-6">
           <Card>
             <div className="mb-3 flex flex-wrap gap-1.5">
+              <Badge tone={lead.status === "paid" ? "green" : lead.status === "lost" ? "red" : "blue"}>{STATUS_WORDS[lead.status] ?? lead.status}</Badge>
               <ScoreBadge score={lead.score} />
-              {lead.urgency === "urgent" ? <Badge tone="red">Urgent</Badge> : lead.urgency === "soon" ? <Badge tone="amber">Soon</Badge> : null}
-              {lead.intent && lead.intent !== "project" ? <Badge>{lead.intent === "job" ? "Job post" : lead.intent === "selling" ? "Selling" : "Unclear"}</Badge> : null}
               <Badge>{SOURCES[lead.source] ?? lead.source}</Badge>
             </div>
-            {lead.reason ? <p className="text-[16px] font-semibold">{lead.reason}</p> : null}
-            <p className="mt-3 text-[15px] leading-relaxed whitespace-pre-line">{lead.text}</p>
+            <p className="text-[15px] leading-relaxed whitespace-pre-line">{lead.text}</p>
+            <div className="mt-4 border-t border-border pt-4 text-[15px]">
+              <ContactCell emails={lead.emails} phones={lead.phones} workEmail={lead.work_email} workStatus={lead.work_email_status} workConfidence={lead.work_email_confidence} />
+            </div>
           </Card>
 
           <Card>
-            <CardHeader title="Reply" description="Write a first message, then copy it into LinkedIn or email." />
-            {lead.reply ? <p className="mb-4 rounded-xl border border-border px-4 py-3 text-[15px] whitespace-pre-line select-all">{lead.reply}</p> : null}
-            <form action={draftReply}>
+            <CardHeader title="Notes" />
+            <form action={saveNotes} className="space-y-3">
               <input type="hidden" name="id" value={lead.id} />
               <input type="hidden" name="back" value={back} />
-              <SubmitButton variant={lead.reply ? "secondary" : "primary"} pendingText="Writing...">
-                {lead.reply ? "Write again" : "Draft a reply"}
-              </SubmitButton>
+              <label className="sr-only" htmlFor="notes">
+                Notes
+              </label>
+              <Textarea id="notes" name="notes" defaultValue={lead.notes} placeholder="Call notes, quote sent, next step..." />
+              <SubmitButton variant="secondary">Save notes</SubmitButton>
             </form>
+          </Card>
+
+          <Card>
+            <CardHeader title="History" description="Who did what, newest first." />
+            {events.length ? (
+              <ul className="space-y-3">
+                {events.map((e) => (
+                  <li key={e.id} className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border pb-3 last:border-b-0 last:pb-0">
+                    <p className="text-[15px]">
+                      <span className="font-semibold">{e.member_name ?? "Someone"}</span> {said(e)}
+                    </p>
+                    <span className="text-[13px] text-muted-foreground">{timeAgo(e.at)}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-[15px] text-muted-foreground">Nothing yet. Changes to status, owner, follow up and notes show here.</p>
+            )}
           </Card>
 
           <Card>
@@ -93,7 +140,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
                   <Field label="Company and role" htmlFor="e-headline" optional>
                     <Input id="e-headline" name="headline" defaultValue={lead.headline ?? ""} maxLength={300} />
                   </Field>
-                  <Field label="Email" htmlFor="e-emails" optional hint="Separate several with commas.">
+                  <Field label="Email" htmlFor="e-emails" optional>
                     <Input id="e-emails" name="emails" defaultValue={lead.emails} maxLength={500} />
                   </Field>
                   <Field label="Phone" htmlFor="e-phones" optional>
@@ -102,7 +149,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
                   <Field label="LinkedIn profile" htmlFor="e-author-url" optional>
                     <Input id="e-author-url" name="author_url" type="url" defaultValue={lead.author_url ?? ""} maxLength={1000} />
                   </Field>
-                  <Field label="Link to the post" htmlFor="e-post-url" optional>
+                  <Field label="Link to the post or email" htmlFor="e-post-url" optional>
                     <Input id="e-post-url" name="post_url" type="url" defaultValue={lead.post_url ?? ""} maxLength={1000} />
                   </Field>
                 </FormGrid>
@@ -113,107 +160,9 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
               </form>
             </details>
           </Card>
-
-          <Card>
-            <CardHeader title="Notes" />
-            <form action={saveNotes} className="space-y-3">
-              <input type="hidden" name="id" value={lead.id} />
-              <input type="hidden" name="back" value={back} />
-              <label className="sr-only" htmlFor="notes">
-                Notes
-              </label>
-              <Textarea id="notes" name="notes" defaultValue={lead.notes} placeholder="Call notes, quote sent, next step..." />
-              <SubmitButton variant="secondary">Save notes</SubmitButton>
-            </form>
-          </Card>
         </div>
 
         <div className="space-y-6">
-          <Card>
-            <CardHeader title="Contact" />
-            <div className="text-[15px]">
-              <ContactCell emails={lead.emails} phones={lead.phones} workEmail={lead.work_email} workStatus={lead.work_email_status} workConfidence={lead.work_email_confidence} />
-            </div>
-            {lead.contact_note ? <p className="mt-2 text-[13px] text-muted-foreground">{lead.contact_note}</p> : null}
-            {person?.email_alternatives ? (
-              <p className="mt-2 text-[13px] text-muted-foreground">Other email options: {list(person.email_alternatives).join(", ")}</p>
-            ) : null}
-            <p className="mt-3 text-[13px] text-muted-foreground">Found means seen in public. Likely means the company pattern was learned from real emails. Guess means the most common pattern.</p>
-          </Card>
-
-          <Card>
-            <CardHeader title="Details" />
-            <DescriptionList
-              items={[
-                { label: "Company", value: person?.company ?? "" },
-                { label: "Location", value: person?.location ?? "" },
-                { label: "Budget", value: lead.budget ?? "" },
-                { label: "Skills", value: lead.skills ?? "" },
-                { label: "Website", value: list(lead.websites)[0] ?? "" },
-                { label: "Found", value: `${timeAgo(lead.captured_at)}${lead.posted_at ? `, posted ${/^\d{4}-/.test(lead.posted_at) ? timeAgo(lead.posted_at) : lead.posted_at}` : ""}` },
-              ]}
-            />
-          </Card>
-
-          <Card>
-            <CardHeader title="Assigned to" description="Who is working this lead." />
-            <p className="mb-3 text-[15px]">
-              {lead.assigned_to ? (lead.assigned_to === me?.id ? "You" : (people.find((p) => p.id === lead.assigned_to)?.name ?? people.find((p) => p.id === lead.assigned_to)?.email ?? "A teammate")) : "Nobody yet"}
-            </p>
-            {all ? (
-              <form action={assignLead} className="flex gap-2">
-                <input type="hidden" name="id" value={lead.id} />
-                <input type="hidden" name="back" value={back} />
-                <label className="sr-only" htmlFor="member">
-                  Assigned to
-                </label>
-                <select id="member" name="member" defaultValue={lead.assigned_to ?? ""} className="h-11 min-w-0 flex-1 rounded-xl border border-input bg-background px-3 text-[15px]">
-                  <option value="">Nobody</option>
-                  {people.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name || p.email}
-                      {p.job === "bde" ? " (BDE)" : p.job === "lead_generator" ? " (Lead generator)" : ""}
-                    </option>
-                  ))}
-                </select>
-                <SubmitButton pendingText="Saving...">Save</SubmitButton>
-              </form>
-            ) : null}
-            <div className="mt-3 flex flex-wrap gap-2">
-              <form action={handToBde}>
-                <input type="hidden" name="id" value={lead.id} />
-                <input type="hidden" name="back" value={back} />
-                <SubmitButton variant="secondary" pendingText="Handing over...">
-                  Give to a BDE
-                </SubmitButton>
-              </form>
-              {me && lead.assigned_to !== me.id ? (
-                <form action={assignLead}>
-                  <input type="hidden" name="id" value={lead.id} />
-                  <input type="hidden" name="back" value={back} />
-                  <input type="hidden" name="member" value="me" />
-                  <SubmitButton variant="secondary" pendingText="Saving...">
-                    Take it myself
-                  </SubmitButton>
-                </form>
-              ) : null}
-            </div>
-            <p className="mt-2 text-[13px] text-muted-foreground">Give to a BDE picks the BDE with the fewest open leads.</p>
-          </Card>
-
-          <Card>
-            <CardHeader title="Follow up" description="The day to contact them next. It shows in Follow-ups due." />
-            <form action={setFollowUp} className="flex gap-2">
-              <input type="hidden" name="id" value={lead.id} />
-              <input type="hidden" name="back" value={back} />
-              <label className="sr-only" htmlFor="follow_up_at">
-                Follow up on
-              </label>
-              <input id="follow_up_at" name="follow_up_at" type="date" defaultValue={lead.follow_up_at ?? ""} className="h-11 min-w-0 flex-1 rounded-xl border border-input bg-background px-3 text-[15px]" />
-              <SubmitButton pendingText="Saving...">Save</SubmitButton>
-            </form>
-          </Card>
-
           <Card>
             <CardHeader title="Status" />
             <form action={setStatus} className="flex gap-2">
@@ -222,7 +171,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
               <label className="sr-only" htmlFor="status">
                 Status
               </label>
-              <select id="status" name="status" defaultValue={lead.status} className="h-11 min-w-0 flex-1 rounded-xl border border-input bg-background px-3 text-[15px]">
+              <select id="status" name="status" defaultValue={lead.status} className={select}>
                 {Object.entries(STATUS_WORDS).map(([k, v]) => (
                   <option key={k} value={k}>
                     {v}
@@ -231,14 +180,65 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
               </select>
               <SubmitButton pendingText="Saving...">Save</SubmitButton>
             </form>
-            {all || lead.captured_by === me?.id ? (
-            <form action={deleteLeads} className="mt-4 border-t border-border pt-4">
-              <input type="hidden" name="ids" value={lead.id} />
-              <input type="hidden" name="back" value="/" />
-              <SubmitButton variant="danger" pendingText="Removing..." confirm="Remove this lead for good?">
-                Remove lead
-              </SubmitButton>
+          </Card>
+
+          <Card>
+            <CardHeader title="Owner" description={lead.assigned_to ? `Now: ${nameOf(lead.assigned_to) ?? "a former member"}` : lead.captured_by ? `Not given to anyone, so it stays with ${nameOf(lead.captured_by) === "You" ? "you" : (nameOf(lead.captured_by) ?? "who added it")}` : "Nobody yet"} />
+            <form action={assignLead} className="flex gap-2">
+              <input type="hidden" name="id" value={lead.id} />
+              <input type="hidden" name="back" value={back} />
+              <label className="sr-only" htmlFor="member">
+                Owner
+              </label>
+              <select id="member" name="member" defaultValue={lead.assigned_to ?? ""} className={select}>
+                <option value="">Nobody</option>
+                {people.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.id === me?.id ? "Me" : p.name || p.email.split("@")[0]}
+                  </option>
+                ))}
+              </select>
+              <SubmitButton pendingText="Saving...">Save</SubmitButton>
             </form>
+          </Card>
+
+          <Card>
+            <CardHeader title="Follow up" />
+            <form action={setFollowUp} className="flex gap-2">
+              <input type="hidden" name="id" value={lead.id} />
+              <input type="hidden" name="back" value={back} />
+              <label className="sr-only" htmlFor="follow_up_at">
+                Follow up on
+              </label>
+              <input id="follow_up_at" name="follow_up_at" type="date" defaultValue={lead.follow_up_at ?? ""} className={select} />
+              <SubmitButton pendingText="Saving...">Save</SubmitButton>
+            </form>
+          </Card>
+
+          <Card>
+            <CardHeader title="About" />
+            <dl className="space-y-2 text-[15px]">
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted-foreground">Added by</dt>
+                <dd>{nameOf(lead.captured_by) ?? "Automatic"}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted-foreground">Added</dt>
+                <dd>{timeAgo(lead.captured_at)}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted-foreground">Source</dt>
+                <dd>{SOURCES[lead.source] ?? lead.source}</dd>
+              </div>
+            </dl>
+            {all || lead.captured_by === me?.id ? (
+              <form action={deleteLeads} className="mt-4 border-t border-border pt-4">
+                <input type="hidden" name="ids" value={lead.id} />
+                <input type="hidden" name="back" value="/" />
+                <SubmitButton variant="danger" pendingText="Removing..." confirm="Delete this lead for good?">
+                  Delete lead
+                </SubmitButton>
+              </form>
             ) : null}
           </Card>
         </div>

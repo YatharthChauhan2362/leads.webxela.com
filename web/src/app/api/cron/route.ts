@@ -28,7 +28,7 @@ export async function GET(req: Request) {
 
   // 2. Follow up reminders: once a day per lead that is due and still open.
   const due = must(
-    await sb().from("leads").select("id, author, reason, assigned_to, follow_up_at").not("assigned_to", "is", null).lte("follow_up_at", today).not("status", "in", "(won,lost)"),
+    await sb().from("leads").select("id, author, reason, assigned_to, follow_up_at").not("assigned_to", "is", null).lte("follow_up_at", today).not("status", "in", "(paid,lost)"),
   ) as Pick<Lead, "id" | "author" | "reason" | "assigned_to" | "follow_up_at">[];
   if (due.length) {
     const sent = must(
@@ -56,7 +56,7 @@ async function dailyDigest(today: string) {
   const people = must(await sb().from("members").select("id, email, name, role").eq("status", "active")) as { id: string; email: string; name: string | null; role: string }[];
   const since = new Date(Date.now() - 24 * 3600_000).toISOString();
   const [open, fresh] = await Promise.all([
-    sb().from("leads").select("id, author, assigned_to, follow_up_at, status, score").in("status", ["new", "contacted", "replied"]).not("assigned_to", "is", null).then((r) => must(r) as Lead[]),
+    sb().from("leads").select("id, author, assigned_to, follow_up_at, status, score").in("status", ["new", "contacted", "interested", "proposal", "contract"]).not("assigned_to", "is", null).then((r) => must(r) as Lead[]),
     sb().from("leads").select("id, score, status").gte("captured_at", since).then((r) => must(r) as Pick<Lead, "id" | "score" | "status">[]),
   ]);
   let sentCount = 0;

@@ -15,5 +15,5 @@ export async function GET(req: Request) {
     await sb().from("notifications").select("id, kind, title, body, lead_id, created_at").eq("member_id", me.id).is("pushed_at", null).order("created_at").limit(10),
   ) as { id: number; kind: string; title: string; body: string | null; lead_id: number | null; created_at: string }[];
   if (items.length) must(await sb().from("notifications").update({ pushed_at: new Date().toISOString() }).in("id", items.map((i) => i.id)));
-  return NextResponse.json({ items: items.map((i) => ({ ...i, url: i.lead_id ? `${appUrl()}/leads/${i.lead_id}` : `${appUrl()}/me` })) }, { headers: CORS });
+  return NextResponse.json({ items: items.map((i) => ({ ...i, url: i.lead_id ? `${appUrl()}/leads/${i.lead_id}` : `${appUrl()}/notifications` })) }, { headers: CORS });
 }

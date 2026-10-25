@@ -266,7 +266,7 @@ $("scan").onclick = async () => {
   setTimeout(() => ($("scan").textContent = "Save posts on this page"), 2500);
 };
 
-$("open").onclick = () => chrome.tabs.create({ url: ($("server").value.trim() || DEFAULTS.server).replace(/\/$/, "") + "/me" });
+$("open").onclick = () => chrome.tabs.create({ url: ($("server").value.trim() || DEFAULTS.server).replace(/\/$/, "") + "/" });
 
 $("watchNow").onclick = () => {
   $("watchNow").textContent = "Running in a background tab...";

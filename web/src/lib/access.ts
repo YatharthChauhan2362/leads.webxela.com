@@ -24,3 +24,8 @@ export async function requireLeadAccess(me: Member | null, leadId: number) {
   } | null;
   if (!lead || (lead.assigned_to !== me!.id && lead.captured_by !== me!.id)) notFound();
 }
+
+/** PostgREST filter for the leads a person owns: given to them, or added by them and not given to anyone. */
+export function ownedByFilter(memberId: string) {
+  return `assigned_to.eq.${memberId},and(assigned_to.is.null,captured_by.eq.${memberId})`;
+}

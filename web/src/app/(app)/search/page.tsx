@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/form";
 import { Callout, EmptyState, PageHeader } from "@/components/ui/layout";
 import { logActivity } from "@/lib/activity";
 import { getSettings, lines, must, sb } from "@/lib/db";
-import { currentMember } from "@/lib/session";
+import { requireMember } from "@/lib/session";
 import { COUNTRIES } from "@/lib/places";
 import { Field, Select } from "@/components/ui/form";
 
@@ -36,7 +36,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   // Show only results not seen before. On by default; "all=1" shows everything again.
   const showAll = sp.all === "1";
   const t = TYPES.find((x) => x.key === type)!;
-  const me = await currentMember();
+  const me = await requireMember("admin");
   // Engines are added on the Search engines page. Only the engine ID is needed, no API key.
   const engines = must(await sb().from("search_engines").select("kind, cx").eq("active", true)) as { kind: string; cx: string }[];
   const cx = engines.find((e) => e.kind === type)?.cx ?? null;

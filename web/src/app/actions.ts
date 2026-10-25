@@ -13,9 +13,16 @@ import { requireMember } from "@/lib/session";
 import { logActivity } from "@/lib/activity";
 import { whiteContrast } from "@/lib/brand";
 import { assignTo, pickBde } from "@/lib/assign";
+import { recordEvent, tellOthers } from "@/lib/history";
+import { STATUS_WORDS } from "@/components/leads";
 import { pollSources } from "@/lib/sources";
 
-const STATUSES = ["new", "contacted", "replied", "won", "lost"] as const;
+const STATUSES = ["new", "contacted", "interested", "proposal", "contract", "paid", "lost"] as const;
+
+type LeadOwners = { id: number; author: string | null; status: string; assigned_to: string | null; captured_by: string | null; follow_up_at: string | null };
+async function owners(id: number) {
+  return must(await sb().from("leads").select("id, author, status, assigned_to, captured_by, follow_up_at").eq("id", id).single()) as LeadOwners;
+}
 const Id = z.coerce.number().int().positive();
 
 function back(formData: FormData, msg: string, kind: "ok" | "error" = "ok"): never {
@@ -34,15 +41,19 @@ export async function setStatus(formData: FormData) {
   const id = Id.parse(formData.get("id"));
   await requireLeadAccess(me, id);
   const status = z.enum(STATUSES).parse(formData.get("status"));
+  const before = await owners(id);
+  if (before.status === status) back(formData, "No change.");
   const now = new Date().toISOString();
   must(
     await sb()
       .from("leads")
-      .update({ status, is_lead: true, ...(status === "contacted" ? { contacted_at: now } : {}), ...(status === "won" ? { won_at: now } : {}) })
+      .update({ status, is_lead: true, ...(status === "contacted" ? { contacted_at: now } : {}), ...(status === "paid" ? { won_at: now } : {}) })
       .eq("id", id),
   );
-  await logActivity(me, "status", { target: `lead ${id}`, detail: status });
-  back(formData, `Moved to ${status}.`);
+  await recordEvent(id, me, "status", before.status, status);
+  await tellOthers(before, me, `${me?.name || "Someone"} moved ${before.author ?? "a lead"} to ${STATUS_WORDS[status]}`);
+  await logActivity(me, "status", { target: `lead ${id}`, detail: `${before.status} to ${status}` });
+  back(formData, `Moved to ${STATUS_WORDS[status]}.`);
 }
 
 export async function saveNotes(formData: FormData) {
@@ -51,6 +62,7 @@ export async function saveNotes(formData: FormData) {
   await requireLeadAccess(me, id);
   const notes = z.string().max(5000).parse(formData.get("notes") ?? "");
   must(await sb().from("leads").update({ notes }).eq("id", id));
+  await recordEvent(id, me, "note", null, notes.slice(0, 200));
   await logActivity(me, "notes", { target: `lead ${id}`, detail: notes.slice(0, 300) });
   back(formData, "Notes saved.");
 }
@@ -145,8 +157,11 @@ export async function assignLead(formData: FormData) {
   await requireLeadAccess(me, id);
   const raw = String(formData.get("member") ?? "");
   const to = raw === "me" ? (me?.id ?? null) : raw ? z.string().uuid().parse(raw) : null;
-  if (!seesAll(me) && to && to !== me?.id) back(formData, "Only admins can give a lead to a named person. Use Give to a BDE.", "error");
+  // Anyone working the lead can hand it to a teammate.
+  const toName = to ? ((must(await sb().from("members").select("name, email").eq("id", to).neq("status", "disabled").maybeSingle()) as { name: string | null; email: string } | null) ?? null) : null;
+  if (to && !toName) back(formData, "That person is not on the team.", "error");
   await assignTo(id, to);
+  await recordEvent(id, me, "assigned", null, toName ? toName.name || toName.email.split("@")[0] : "Nobody");
   await logActivity(me, "assign", { target: `lead ${id}`, detail: to ?? "nobody" });
   back(formData, to ? "Lead assigned." : "Lead is now unassigned.");
 }
@@ -205,6 +220,7 @@ export async function setFollowUp(formData: FormData) {
   const raw = String(formData.get("follow_up_at") ?? "");
   const date = raw ? z.string().regex(/^\d{4}-\d{2}-\d{2}$/).parse(raw) : null;
   must(await sb().from("leads").update({ follow_up_at: date, ...(date ? { is_lead: true } : {}) }).eq("id", id));
+  await recordEvent(id, me, "follow_up", null, date ?? "cleared");
   await logActivity(me, "status", { target: `lead ${id}`, detail: date ? `Follow up on ${date}` : "Follow up cleared" });
   back(formData, date ? "Follow up date saved." : "Follow up date cleared.");
 }
@@ -311,11 +327,11 @@ export async function createLead(formData: FormData) {
   if (lead) {
     // Contact details typed in by hand are known for sure.
     must(await sb().from("leads").update({ emails: listOf(d.emails), phones: listOf(d.phones), contact_note: d.emails || d.phones ? "Added by hand" : null }).eq("id", lead.id));
-    if (me) await assignTo(lead.id, me.id);
+    await recordEvent(lead.id, me, "created", null, d.source);
   }
   await logActivity(me, "add_post", { detail: `Added a lead by hand: ${d.author}` });
   if (!res.added || !lead) back(formData, "Could not add the lead.", "error");
-  redirect(`/leads/${lead.id}?ok=${encodeURIComponent("Lead added and given to you.")}`);
+  redirect(`/leads/${lead.id}?ok=${encodeURIComponent("Lead added.")}`);
 }
 
 /** Edit a lead's details. */
@@ -342,6 +358,7 @@ export async function updateLead(formData: FormData) {
       })
       .eq("id", id),
   );
+  await recordEvent(id, me, "edited");
   await logActivity(me, "notes", { target: `lead ${id}`, detail: "Edited lead details" });
   back(formData, "Lead updated.");
 }

@@ -24,7 +24,7 @@ function back(path: string, msg: string, kind: "ok" | "error" = "ok"): never {
 
 /** Saves a search result as a lead, credited to you, whatever its score. */
 export async function saveHitAsLead(formData: FormData) {
-  const me = await requireMember();
+  const me = await requireMember("admin");
   const h = Hit.parse(Object.fromEntries(formData));
   const slug = h.link.match(/linkedin\.com\/(?:in|posts)\/([^_/?]+)/)?.[1];
   const res = await ingestPosts(
@@ -52,7 +52,7 @@ export async function saveHitAsLead(formData: FormData) {
 
 /** Saves a LinkedIn profile result to People, and predicts their work email. */
 export async function saveHitAsPerson(formData: FormData) {
-  const me = await requireMember();
+  const me = await requireMember("admin");
   const h = Hit.parse(Object.fromEntries(formData));
   const url = cleanProfileUrl(h.link);
   if (!url || !/linkedin\.com\/in\//.test(url)) back(h.back, "Only LinkedIn profile results can be saved to People.", "error");

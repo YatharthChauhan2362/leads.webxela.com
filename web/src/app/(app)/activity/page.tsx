@@ -180,7 +180,7 @@ const FEATURES: [RegExp, string][] = [
   [/^\/$|^\/\?/, "Leads"],
   [/^\/leads\//, "Lead details"],
   [/^\/people/, "People"],
-  [/^\/me/, "My work"],
+  [/^\/dashboard/, "Dashboard"],
   [/^\/team/, "Team"],
   [/^\/settings/, "Searches and alerts"],
   [/^\/activity/, "Activity"],

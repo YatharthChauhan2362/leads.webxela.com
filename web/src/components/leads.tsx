@@ -15,7 +15,17 @@ export const SOURCES: Record<string, string> = {
 
 export const JOB_WORDS: Record<string, string> = { lead_generator: "Lead generator", bde: "BDE (sales)", manager: "Manager", other: "Other" };
 
-export const STATUS_WORDS: Record<string, string> = { new: "New", contacted: "Contacted", replied: "Replied", won: "Won", lost: "Lost" };
+// The team's pipeline, in order.
+export const STATUS_WORDS: Record<string, string> = {
+  new: "New",
+  contacted: "Contacted",
+  interested: "Interested",
+  proposal: "Proposal sent",
+  contract: "Contract signed",
+  paid: "Payment received",
+  lost: "Lost",
+};
+export const OPEN_STATUSES = ["new", "contacted", "interested", "proposal", "contract"];
 
 const WORK_WORDS: Record<string, string> = { found: "Found", likely: "Likely", guess: "Guess" };
 
