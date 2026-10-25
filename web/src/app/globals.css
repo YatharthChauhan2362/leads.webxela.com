@@ -1,0 +1,264 @@
+@import "tailwindcss";
+
+/* Yatri Cloud design tokens (DESIGN.md): white canvas, near-black ink, one blue accent. No pale blue tints. */
+@theme {
+  --color-background: hsl(0 0% 100%);
+  --color-foreground: hsl(0 0% 9%);
+  --color-surface: hsl(0 0% 98%);
+  --color-canvas: hsl(0 0% 98%);
+  --color-muted: hsl(0 0% 96%);
+  --color-muted-foreground: hsl(0 0% 38%);
+  --color-border: hsl(0 0% 90%);
+  --color-input: hsl(0 0% 84%);
+  --color-ring: hsl(210 100% 50%);
+
+  --color-primary: hsl(210 100% 50%);
+  --color-primary-hover: hsl(210 100% 44%);
+  --color-primary-foreground: hsl(0 0% 100%);
+  --color-brand: hsl(210 100% 50%);
+
+  --color-success: hsl(152 65% 28%);
+  --color-success-soft: hsl(152 55% 94%);
+  --color-warning: hsl(30 90% 32%);
+  --color-warning-soft: hsl(40 95% 92%);
+  --color-danger: hsl(0 70% 44%);
+  --color-danger-soft: hsl(0 85% 96%);
+
+  --font-sans: var(--font-inter-tight), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: var(--font-bricolage), var(--font-inter-tight), system-ui, sans-serif;
+
+  --radius-sm: 0.5rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+
+  --shadow-inset: inset 0 0.5px 0 hsl(0 0% 100% / 0.25), inset 0 0 0 0.5px hsl(0 0% 0% / 0.2), 0 1px 2px hsl(0 0% 0% / 0.08);
+  --shadow-card: 0 4px 16px hsl(0 0% 0% / 0.06);
+  --shadow-elevated: 0 12px 32px hsl(0 0% 0% / 0.1);
+  --shadow-glow: 0 0 40px hsl(210 100% 50% / 0.12);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.015em;
+    line-height: 1.15;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+  button, a, input, select, textarea, label {
+    touch-action: manipulation;
+  }
+  table {
+    font-variant-numeric: tabular-nums;
+  }
+  summary {
+    list-style: none;
+    cursor: pointer;
+  }
+  summary::-webkit-details-marker {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+  }
+  .print-sheet {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+  @page {
+    margin: 14mm;
+  }
+  .hero-card {
+    background: none !important;
+    color: #171717 !important;
+    box-shadow: none !important;
+    padding: 0 0 12px !important;
+  }
+  .hero-card .text-white\/85 {
+    color: #555 !important;
+  }
+}
+
+/* Yatri Cloud signature utilities */
+@layer components {
+  /* Blue word in the logo ("Playbook"). Solid, same blue as everything else. */
+  .gradient-text {
+    color: var(--color-brand);
+  }
+  .band-blue {
+    background-color: hsl(210 100% 50%);
+    color: #fff;
+  }
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-muted-foreground);
+  }
+}
+
+/* Blue page header (white text only on blue) */
+.hero-card {
+  background-color: var(--color-brand);
+  color: #fff;
+  box-shadow: var(--shadow-glow);
+}
+.hero-card :is(h1, h2, h3, p, a, label):not([class*="bg-"]) {
+  color: inherit;
+}
+/* Status pills inside the blue header: white pill, blue text. */
+.hero-card .badge {
+  background: #fff;
+  color: var(--color-primary);
+  box-shadow: none;
+}
+
+/* Actions inside the blue header: first is solid white with blue text, the rest are white outline. */
+.hero-actions :is(a, button) {
+  background: transparent;
+  color: #fff;
+  border: 1px solid hsl(0 0% 100% / 0.4);
+  box-shadow: none;
+}
+.hero-actions :is(a, button):hover {
+  background: hsl(0 0% 100% / 0.16);
+  color: #fff;
+  border-color: hsl(0 0% 100% / 0.6);
+}
+.hero-actions > :first-child:is(a, button),
+.hero-actions > :first-child :is(a, button) {
+  background: #fff;
+  color: var(--color-primary);
+  border-color: #fff;
+}
+.hero-actions > :first-child:is(a, button):hover,
+.hero-actions > :first-child :is(a, button):hover {
+  background: hsl(0 0% 94%);
+  color: var(--color-primary-hover);
+}
+
+input[type="file"]::file-selector-button {
+  margin-right: 12px;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 12px;
+  border: 1px solid var(--color-primary);
+  background: #fff;
+  color: var(--color-primary);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+input[type="file"]::file-selector-button:hover {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+/* Grids default to one column that may shrink below its content width, so wide tables
+   scroll inside their own box instead of pushing the page sideways on phones.
+   In the base layer so any grid-cols-* utility still wins. */
+@layer base {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .grid > * {
+    min-width: 0;
+  }
+}
+
+/* Faint white grid over blue bands on the landing page */
+.hero-grid {
+  background-image:
+    linear-gradient(hsl(0 0% 100% / 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(0 0% 100% / 0.07) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse at 30% 40%, #000 30%, transparent 75%);
+}
+
+/* Slow up-and-down drift for the notes over the landing page product picture */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+/* The click mark (circle or cursor) over a screenshot. Its SVG scales to the span's width. */
+.click-marker {
+  position: absolute;
+  display: block;
+  pointer-events: none;
+  line-height: 0;
+  --mk: 1;
+}
+.click-marker > svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+@media (max-width: 640px) {
+  .click-marker { --mk: 0.72; }
+}
+
+/* Long text written in the editor keeps its line breaks. */
+.prose-plain { white-space: pre-line; overflow-wrap: anywhere; }
+
+@media print {
+  .step-card { break-inside: avoid; }
+}
+
+/* Top progress bar while the next app screen loads */
+.nav-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 60;
+  height: 3px;
+  width: 0;
+  background: var(--color-primary);
+  animation: nav-progress 8s cubic-bezier(0.1, 0.7, 0.2, 1) forwards;
+}
+@keyframes nav-progress {
+  0% { width: 0; }
+  10% { width: 35%; }
+  100% { width: 92%; }
+}
+
+/* Faint grid behind the hero on white (ink lines, no tint) */
+.hero-grid-light {
+  background-image:
+    linear-gradient(hsl(0 0% 0% / 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(0 0% 0% / 0.045) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 40%, transparent 80%);
+}
+.h-13 { height: 3.25rem; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }

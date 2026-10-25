@@ -1,0 +1,18 @@
+node_modules/
+.next/
+out/
+.vercel/
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+
+# Secrets: never commit. .env.example lists every key.
+.env*
+!.env.example
+
+# Local data: LinkedIn browser session, worker logs, test output.
+web/data/
+web/supabase/.temp/
+web/supabase/.branches/
+web/test-results/
+web/playwright-report/

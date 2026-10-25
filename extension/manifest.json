@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Yatri Leads",
+  "version": "0.2.0",
+  "description": "Saves LinkedIn posts from people who need a project built, and their public contact info, to Yatri Leads.",
+  "permissions": ["storage", "alarms", "tabs", "cookies"],
+  "host_permissions": [
+    "https://www.linkedin.com/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "https://*.yatricloud.com/*",
+    "https://leads.webxela.com/*",
+    "https://*.vercel.app/*"
+  ],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://www.linkedin.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Yatri Leads",
+    "default_popup": "popup.html",
+    "default_icon": { "16": "icon16.png", "48": "icon48.png", "128": "icon128.png" }
+  },
+  "icons": { "16": "icon16.png", "48": "icon48.png", "128": "icon128.png" }
+}
