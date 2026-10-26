@@ -6,11 +6,13 @@ import { Input } from "@/components/ui/form";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { joinEveryone, myRooms, nameOf, roomFor } from "@/lib/chat";
 import { must, sb } from "@/lib/db";
-import { requireMember } from "@/lib/session";
+import { can, requireMember } from "@/lib/session";
+import Link from "next/link";
+import { Card } from "@/components/ui/layout";
 
 type Person = { id: string; name: string | null; email: string };
 
-function NewChat({ people, meId }: { people: Person[]; meId: string }) {
+function NewChat({ people, meId, admin }: { people: Person[]; meId: string; admin: boolean }) {
   const others = people.filter((p) => p.id !== meId);
   const select = "h-11 w-full rounded-xl border border-input bg-background px-3 text-[15px]";
   return (
@@ -57,6 +59,11 @@ function NewChat({ people, meId }: { people: Person[]; meId: string }) {
           </SubmitButton>
         </form>
       </details>
+      {admin ? (
+        <Link href="/chat?manage=1" className="flex min-h-[44px] items-center rounded-xl border border-border px-3 text-[15px] font-semibold hover:bg-muted">
+          Manage all groups
+        </Link>
+      ) : null}
     </div>
   );
 }
@@ -72,7 +79,89 @@ export default async function ChatPage({ searchParams }: { searchParams: Promise
     joinEveryone(me),
   ]);
   const links = rooms.map((r) => ({ id: r.id, kind: r.kind, title: r.title, unread: r.unread, people: r.people }));
-  const side = <NewChat people={people} meId={me.id} />;
+  const admin = can(me, "admin");
+  const side = <NewChat people={people} meId={me.id} admin={admin} />;
+
+  // Team admins: every group's name and people, to add or remove anyone. Never the messages.
+  if (sp.manage === "1" && admin) {
+    const groups = must(await sb().from("chat_rooms").select("id, name, created_at").eq("kind", "group").order("name")) as { id: number; name: string | null }[];
+    const links = groups.length ? (must(await sb().from("chat_members").select("room_id, member_id, is_admin").in("room_id", groups.map((g) => g.id))) as { room_id: number; member_id: string; is_admin: boolean }[]) : [];
+    const who = new Map(people.map((p) => [p.id, nameOf(p)]));
+    return (
+      <>
+        <Link href="/chat" className="mb-2 inline-flex min-h-[44px] items-center text-[15px] font-medium text-primary">
+          Back to chat
+        </Link>
+        <h1 className="mb-1 text-[24px] font-bold">Manage groups</h1>
+        <p className="mb-4 text-[15px] text-muted-foreground">As a team admin you can add and remove people in any group. You cannot read groups you are not in.</p>
+        <Flash searchParams={sp} />
+        {groups.length ? null : <p className="text-[15px] text-muted-foreground">No groups yet.</p>}
+        <div className="space-y-4">
+          {groups.map((g) => {
+            const inIt = links.filter((l) => l.room_id === g.id);
+            const out = people.filter((p) => !inIt.some((l) => l.member_id === p.id));
+            return (
+              <Card key={g.id}>
+                <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+                  <h2 className="text-[17px] font-semibold">{g.name ?? "Group"}</h2>
+                  <span className="text-[13px] text-muted-foreground">{inIt.length} people</span>
+                </div>
+                <ul className="mb-3 divide-y divide-border">
+                  {inIt.map((l) => (
+                    <li key={l.member_id} className="flex min-h-[44px] items-center justify-between gap-2 text-[15px]">
+                      <span className="truncate">
+                        {who.get(l.member_id) ?? "Former member"}
+                        {l.is_admin ? <span className="text-muted-foreground">, group admin</span> : null}
+                      </span>
+                      <form action={removeFromGroup}>
+                        <input type="hidden" name="room" value={g.id} />
+                        <input type="hidden" name="person" value={l.member_id} />
+                        <input type="hidden" name="from" value="manage" />
+                        <SubmitButton variant="secondary" size="sm" pendingText="...">
+                          Remove
+                        </SubmitButton>
+                      </form>
+                    </li>
+                  ))}
+                </ul>
+                <div className="flex flex-wrap items-end gap-2">
+                  {out.length ? (
+                    <form action={addToGroup} className="flex min-w-0 flex-1 gap-2">
+                      <input type="hidden" name="room" value={g.id} />
+                      <input type="hidden" name="from" value="manage" />
+                      <label className="sr-only" htmlFor={`add-${g.id}`}>
+                        Add a person
+                      </label>
+                      <select id={`add-${g.id}`} name="people" required defaultValue="" className="h-11 min-w-0 flex-1 rounded-xl border border-input bg-background px-3 text-[15px]">
+                        <option value="" disabled>
+                          Add a person
+                        </option>
+                        {out.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {nameOf(p)}
+                          </option>
+                        ))}
+                      </select>
+                      <SubmitButton size="sm" pendingText="Adding...">
+                        Add
+                      </SubmitButton>
+                    </form>
+                  ) : null}
+                  <form action={deleteGroup}>
+                    <input type="hidden" name="room" value={g.id} />
+                    <input type="hidden" name="from" value="manage" />
+                    <SubmitButton variant="danger" size="sm" pendingText="Deleting..." confirm={`Delete ${g.name ?? "this group"} with its messages and files for everyone?`}>
+                      Delete group
+                    </SubmitButton>
+                  </form>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      </>
+    );
+  }
 
   // On a phone, "All chats" shows the list and the new chat forms.
   if (sp.list === "1") {
@@ -96,6 +185,8 @@ export default async function ChatPage({ searchParams }: { searchParams: Promise
     room.kind === "group"
       ? (must(await sb().from("chat_members").select("member_id, is_admin").eq("room_id", room.id)) as { member_id: string; is_admin: boolean }[])
       : [];
+  // Group admins and team admins can manage the group.
+  const manage = room.is_admin || admin;
   const nameById = new Map(people.map((p) => [p.id, p.id === me.id ? "You" : nameOf(p)]));
   const title = row?.title ?? room.name ?? "Chat";
   const subtitle =
@@ -113,7 +204,7 @@ export default async function ChatPage({ searchParams }: { searchParams: Promise
                   {nameById.get(m.member_id) ?? "Former member"}
                   {m.is_admin ? <span className="text-muted-foreground">, admin</span> : null}
                 </span>
-                {room.is_admin && m.member_id !== me.id ? (
+                {manage && m.member_id !== me.id ? (
                   <form action={removeFromGroup}>
                     <input type="hidden" name="room" value={room.id} />
                     <input type="hidden" name="person" value={m.member_id} />
@@ -125,7 +216,7 @@ export default async function ChatPage({ searchParams }: { searchParams: Promise
               </li>
             ))}
           </ul>
-          {room.is_admin ? (
+          {manage ? (
             <>
               <form action={addToGroup} className="space-y-2 border-t border-border pt-3">
                 <input type="hidden" name="room" value={room.id} />
@@ -170,7 +261,7 @@ export default async function ChatPage({ searchParams }: { searchParams: Promise
                 Leave group
               </SubmitButton>
             </form>
-            {room.is_admin ? (
+            {manage ? (
               <form action={deleteGroup}>
                 <input type="hidden" name="room" value={room.id} />
                 <SubmitButton variant="danger" size="sm" pendingText="Deleting..." confirm="Delete this group, its messages and files for everyone?">

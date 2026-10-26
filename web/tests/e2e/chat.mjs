@@ -28,6 +28,7 @@ const api = (id, path, init = {}) => fetch(BASE + path, { ...init, headers: { co
 await db.from("members").delete().like("email", "yatri-test-chat-%");
 const mk = async (n) => (await db.from("members").insert({ email: `yatri-test-chat-${n}@example.com`, name: `Chat ${n.toUpperCase()}`, role: "member", status: "active" }).select("id").single()).data.id;
 const A = await mk("a"), B = await mk("b"), C = await mk("c");
+const D = (await db.from("members").insert({ email: "yatri-test-chat-d@example.com", name: "Chat D", role: "admin", status: "active" }).select("id").single()).data.id;
 const browser = await chromium.launch({ channel: "chrome", headless: true });
 const as = async (id) => {
   const c = await browser.newContext();
@@ -36,7 +37,7 @@ const as = async (id) => {
   p.setDefaultTimeout(20000);
   return p;
 };
-const pa = await as(A), pb = await as(B), pc = await as(C);
+const pa = await as(A), pb = await as(B), pc = await as(C), pd = await as(D);
 const say = async (p, text) => {
   await p.fill("#chat-text", text);
   await p.press("#chat-text", "Enter");
@@ -157,6 +158,20 @@ try {
   await Promise.all([pa.waitForURL(/room=\d+/), pa.click("button:has-text('Open chat')")]);
   ok(Number(new URL(pa.url()).searchParams.get("room")) === D, "one direct chat per pair");
 
+  // Team admin D is not in the group: can manage people, cannot read
+  await pd.goto(BASE + "/chat?manage=1");
+  ok(/Manage groups/.test(await pd.locator("main").innerText()) && /Yatri Test Group/.test(await pd.locator("main").innerText()), "team admin sees every group in Manage groups");
+  ok(!(await pd.locator("main").innerText()).includes(secret), "Manage groups shows no messages");
+  await pd.selectOption(`#add-${G}`, C);
+  await Promise.all([pd.waitForURL(/ok=Added/), pd.locator(`form:has(#add-${G}) button`).click()]);
+  ok((await db.from("chat_members").select("member_id").eq("room_id", G).eq("member_id", C).maybeSingle()).data !== null, "team admin added C to the group");
+  ok((await pd.goto(BASE + `/chat?room=${G}`)).status() === 404, "team admin still cannot read a group they are not in");
+  await pd.goto(BASE + "/chat?manage=1");
+  await Promise.all([pd.waitForURL(/ok=Removed/), pd.locator(`form:has(input[name=person][value="${C}"]):has(input[name=room][value="${G}"]) button`).click()]);
+  ok((await db.from("chat_members").select("member_id").eq("room_id", G).eq("member_id", C).maybeSingle()).data === null, "team admin removed C from the group");
+  await pc.goto(BASE + "/chat?manage=1");
+  ok(!/Manage groups/.test(await pc.locator("main").innerText()), "members cannot open Manage groups");
+
   // Group admin powers: B is not admin
   await pb.goto(BASE + `/chat?room=${G}`);
   await pb.locator("header summary", { hasText: /^Group$/ }).click();
@@ -189,7 +204,7 @@ try {
   console.log("ERROR", e.message);
 } finally {
   await browser.close();
-  const ids = [A, B, C];
+  const ids = [A, B, C, D];
   const paths = ((await db.from("chat_messages").select("file_path").in("member_id", ids).not("file_path", "is", null)).data ?? []).map((f) => f.file_path);
   if (paths.length) await db.storage.from("chat").remove(paths);
   await db.from("chat_rooms").delete().in("created_by", ids);

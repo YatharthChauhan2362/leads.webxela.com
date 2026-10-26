@@ -7,7 +7,7 @@ import { Flash } from "@/components/ui/flash";
 import { Field, FormGrid, Input, Textarea } from "@/components/ui/form";
 import { Badge, Callout, Card, CardHeader, PageHeader } from "@/components/ui/layout";
 import { SubmitButton } from "@/components/ui/submit-button";
-import { LiveRefresh, StatusPicker } from "@/components/status-picker";
+import { StatusPicker } from "@/components/status-picker";
 import { requireLeadAccess, seesAll } from "@/lib/access";
 import { findDuplicates } from "@/lib/duplicates";
 import { must, sb, type Lead } from "@/lib/db";
@@ -89,15 +89,14 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
         }
       />
       <Flash searchParams={searchParams} />
-      <LiveRefresh />
       {dups.length ? (
         <Callout tone="amber" label="Someone else has this person too" className="mb-6">
           {dups.map((d) => `${d.owner} (${STATUS_WORDS[d.status] ?? d.status})`).join(", ")}. Agree who works it, then mark the other one Lost.
         </Callout>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
-        <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_360px] lg:gap-6">
+        <div className="space-y-4 lg:space-y-6">
           <Card>
             <div className="mb-3 flex flex-wrap gap-1.5">
               <Badge tone={lead.status === "paid" ? "green" : lead.status === "lost" ? "red" : "blue"}>{STATUS_WORDS[lead.status] ?? lead.status}</Badge>
@@ -178,7 +177,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
           </Card>
         </div>
 
-        <div className="space-y-6">
+        <div className="order-first space-y-4 lg:order-none lg:space-y-6">
           <Card>
             <CardHeader title="Status" />
             <StatusPicker id={lead.id} status={lead.status} label="Status" wide />

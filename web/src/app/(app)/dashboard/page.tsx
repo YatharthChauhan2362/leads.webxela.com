@@ -2,7 +2,6 @@ import Link from "next/link";
 import { STATUS_WORDS, dealWords, moneyTotals } from "@/components/leads";
 import { setClaudeAuto } from "@/app/actions";
 import { Flash } from "@/components/ui/flash";
-import { LiveRefresh } from "@/components/status-picker";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { timeAgo } from "@/components/shell/app-shell";
 import { Card, CardHeader, PageHeader, Stat } from "@/components/ui/layout";
@@ -49,7 +48,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     <>
       <PageHeader title="Dashboard" description="Every person's leads by status. Click a number to open those leads." />
       <Flash searchParams={searchParams} />
-      <LiveRefresh seconds={30} />
       <Card className="mb-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -68,14 +66,46 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           </form>
         </div>
       </Card>
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:mb-6 sm:gap-3 lg:grid-cols-4">
         <Stat label="All leads" value={leads.length} href="/?status=all" />
         <Stat label="In progress" value={count("contacted") + count("interested") + count("proposal")} note="Contacted to proposal sent" />
         <Stat label="Contract signed" value={count("contract")} href="/?status=contract" />
         <Stat label="Payment received" value={count("paid")} note={`${value(leads) || "Nothing"} signed in total`} href="/?status=paid" />
       </div>
 
-      <Card padded={false} className="mb-6">
+      {/* Phones: one card per person. */}
+      <ul className="mb-6 space-y-3 md:hidden">
+        {rows.map((r) => (
+          <li key={r.id} className="rounded-2xl border border-border bg-background p-4">
+            <div className="flex items-baseline justify-between gap-3">
+              <Link href={r.id === "none" ? "/?who=none&status=all" : link(r.id)} className="text-[17px] font-semibold active:opacity-70">
+                {r.name}
+              </Link>
+              <span className="text-[14px] text-muted-foreground">{r.total} leads</span>
+            </div>
+            {r.value ? <p className="mt-0.5 text-[14px] font-medium text-success">{r.value} signed</p> : null}
+            {r.due ? <p className="mt-0.5 text-[14px] font-semibold text-danger">{r.due} follow ups due</p> : null}
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {statuses
+                .filter((st) => r.by[st])
+                .map((st) =>
+                  r.id === "none" ? (
+                    <span key={st} className="rounded-full bg-muted px-3 py-1.5 text-[13px]">
+                      {STATUS_WORDS[st]} {r.by[st]}
+                    </span>
+                  ) : (
+                    <Link key={st} href={link(r.id, st)} className="rounded-full bg-muted px-3 py-1.5 text-[13px] active:bg-border">
+                      {STATUS_WORDS[st]} <span className="font-semibold">{r.by[st]}</span>
+                    </Link>
+                  ),
+                )}
+              {!r.total ? <span className="text-[13px] text-muted-foreground">No leads yet</span> : null}
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      <Card padded={false} className="mb-6 hidden md:block">
         <div className="p-5 pb-0">
           <CardHeader title="By person" />
         </div>

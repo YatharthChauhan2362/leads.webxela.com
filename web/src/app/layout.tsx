@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import type { CSSProperties } from "react";
 import { getBrand } from "@/lib/brand";
@@ -9,8 +9,17 @@ const bricolage = localFont({ src: "./fonts/bricolage-grotesque-latin-wght-norma
 
 export async function generateMetadata(): Promise<Metadata> {
   const b = await getBrand();
-  return { title: b.tabTitle, description: "Find people who need a project built, the moment they post.", icons: { icon: b.favicon, apple: b.favicon } };
+  return {
+    title: b.tabTitle,
+    description: "Find people who need a project built, the moment they post.",
+    icons: { icon: b.favicon, apple: b.favicon },
+    // Added to a phone's home screen, it opens full screen like an app.
+    appleWebApp: { capable: true, title: b.tabTitle, statusBarStyle: "default" },
+    applicationName: b.tabTitle,
+  };
 }
+
+export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover", themeColor: "#ffffff", colorScheme: "light", interactiveWidget: "resizes-content" };
 
 export const dynamic = "force-dynamic";
 

@@ -33,7 +33,7 @@ export default async function NotificationsPage() {
     <>
       <PageHeader
         title="Notifications"
-        description="Hot leads, leads given to you and follow ups. Your extension also shows these as desktop alerts within a minute."
+        description="Leads given to you, changes teammates make to your leads, follow ups due and replies to your feedback."
         actions={
           <>
             <form action={markAllRead}>

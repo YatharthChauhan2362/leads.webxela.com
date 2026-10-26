@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { addToLeads, checkNow, deleteLeads } from "@/app/actions";
-import { LiveRefresh, StatusPicker } from "@/components/status-picker";
+import { StatusPicker } from "@/components/status-picker";
+import { MobileFold } from "@/components/ui/fold";
 import { ContactCell, SOURCES, ScoreBadge } from "@/components/leads";
 import { timeAgo } from "@/components/shell/app-shell";
 import { buttonClass } from "@/components/ui/button";
@@ -145,9 +146,8 @@ export async function LeadsView({ searchParams, mode }: { searchParams: Promise<
         }
       />
       <Flash searchParams={sp} />
-      <LiveRefresh />
 
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:mb-6 sm:gap-3 lg:grid-cols-4">
         <Stat label="Last 24 hours" value={today} note={finds ? "New finds" : "Leads added"} />
         {finds ? (
           <Stat label="Hot today" value={hot} note="At or above your alert score" href={here({ min: "70", status: "all" })} />
@@ -170,6 +170,7 @@ export async function LeadsView({ searchParams, mode }: { searchParams: Promise<
       />
       )}
 
+      <MobileFold label="Search and filter" active={Boolean(q || source || who || contact || matchesOnly)}>
       <form className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[1fr_150px_140px_150px_140px_auto_auto_auto]" action={base}>
         <input type="hidden" name="status" value={status} />
         <label className="sr-only" htmlFor="q">Search</label>
@@ -226,6 +227,7 @@ export async function LeadsView({ searchParams, mode }: { searchParams: Promise<
         ) : null}
         <button className={buttonClass("secondary", "md", "h-12")}>Filter</button>
       </form>
+      </MobileFold>
 
       {leads.length === 0 ? (
         <EmptyState
@@ -257,6 +259,79 @@ export async function LeadsView({ searchParams, mode }: { searchParams: Promise<
               </SubmitButton>
             </div>
           </form>
+          {/* Phones: one card per lead, the actions a thumb needs. */}
+          <ul className="space-y-3 md:hidden">
+            {leads.map((l) => {
+              const phone = l.phones.split(",")[0]?.trim();
+              const email = (l.emails.split(",")[0]?.trim() || l.work_email) ?? "";
+              const owner = l.assigned_to ?? l.captured_by;
+              const due = l.follow_up_at && l.follow_up_at <= todayDate;
+              return (
+                <li key={l.id} className="rounded-2xl border border-border bg-background p-4">
+                  <div className="flex items-start gap-3">
+                    <label className="-m-2 flex size-11 shrink-0 items-center justify-center">
+                      <span className="sr-only">Select {l.author}</span>
+                      <input type="checkbox" name="ids" value={l.id} form="bulk" className="size-5 accent-primary" />
+                    </label>
+                    <Link href={`/leads/${l.id}`} className="min-w-0 flex-1 active:opacity-70">
+                      <p className="truncate text-[17px] font-semibold">{l.author || "Unknown"}</p>
+                      {l.headline ? <p className="truncate text-[13px] text-muted-foreground">{l.headline}</p> : null}
+                      <p className="mt-1.5 line-clamp-2 text-[14px] leading-snug">{l.reason || l.text}</p>
+                    </Link>
+                    {finds ? <ScoreBadge score={l.score} /> : null}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 pl-8 text-[13px] text-muted-foreground">
+                    <span>{owner ? (nameOf.get(owner) ?? "Former member") : "Nobody"}</span>
+                    <span>{timeAgo(l.captured_at)}</span>
+                    {l.budget ? <span>{l.budget}</span> : null}
+                    {l.follow_up_at ? (
+                      <span className={due ? "font-semibold text-danger" : ""}>
+                        Follow up {new Date(l.follow_up_at + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="mt-3 pl-8">
+                    {finds ? (
+                      <form action={addToLeads}>
+                        <input type="hidden" name="ids" value={l.id} />
+                        <input type="hidden" name="back" value={backTo} />
+                        <SubmitButton size="sm" pendingText="Adding...">
+                          Add to leads
+                        </SubmitButton>
+                      </form>
+                    ) : (
+                      <StatusPicker id={l.id} status={l.status} label={`Status for ${l.author ?? "lead"}`} wide idPrefix="m-" />
+                    )}
+                  </div>
+                  {phone || email || l.author_url ? (
+                    <div className="mt-1 grid auto-cols-fr grid-flow-col gap-2 pl-8">
+                      {phone ? (
+                        <a href={`tel:${phone.replace(/[^\d+]/g, "")}`} className={buttonClass("secondary", "sm", "w-full")}>
+                          Call
+                        </a>
+                      ) : null}
+                      {phone ? (
+                        <a href={`https://wa.me/${phone.replace(/\D/g, "")}`} target="_blank" rel="noopener noreferrer" className={buttonClass("secondary", "sm", "w-full")}>
+                          WhatsApp
+                        </a>
+                      ) : null}
+                      {email ? (
+                        <a href={`mailto:${email}`} className={buttonClass("secondary", "sm", "w-full")}>
+                          Email
+                        </a>
+                      ) : null}
+                      {l.author_url ? (
+                        <a href={l.author_url} target="_blank" rel="noopener noreferrer" className={buttonClass("secondary", "sm", "w-full")}>
+                          Profile
+                        </a>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+          <div className="hidden md:block">
           <Table>
             <THead>
               <tr>
@@ -344,6 +419,7 @@ export async function LeadsView({ searchParams, mode }: { searchParams: Promise<
               ))}
             </tbody>
           </Table>
+          </div>
         </>
       )}
     </>

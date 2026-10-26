@@ -1,4 +1,5 @@
 import { savePreferences } from "@/app/actions";
+import { SettingsTabs } from "@/components/settings-tabs";
 import { Flash } from "@/components/ui/flash";
 import { Checkbox, Field, FormSection, Input, Select, Textarea } from "@/components/ui/form";
 import { Card, PageHeader } from "@/components/ui/layout";
@@ -13,9 +14,10 @@ export default async function PreferencesPage({ searchParams }: { searchParams: 
   return (
     <>
       <PageHeader
-        title="Preferences"
+        title="Settings"
         description="What a good lead looks like for you, where to look, and how often. Members and their extensions follow these and cannot change them."
       />
+      <SettingsTabs active="preferences" />
       <Flash searchParams={searchParams} />
       <Card>
         <form action={savePreferences} className="space-y-8">

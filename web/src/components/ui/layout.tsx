@@ -21,20 +21,20 @@ export function PageHeader({
   back?: { href: string; label: string };
 }) {
   return (
-    <header className="mb-7">
+    <header className="mb-5 lg:mb-7">
       {back ? (
-        <Link href={back.href} className="no-print mb-3 inline-flex min-h-[44px] items-center text-sm font-medium text-muted-foreground hover:text-primary">
+        <Link href={back.href} className="no-print mb-2 inline-flex min-h-[44px] items-center text-[15px] font-medium text-primary hover:underline">
           Back to {back.label}
         </Link>
       ) : null}
-      <div className="hero-card print-sheet relative overflow-hidden rounded-3xl px-6 py-7 sm:px-9 sm:py-9" style={{ backgroundImage: BLUE_PANEL }}>
+      <div className="hero-card print-sheet relative overflow-hidden rounded-2xl px-5 py-5 sm:rounded-3xl sm:px-9 sm:py-9" style={{ backgroundImage: BLUE_PANEL }}>
         <div aria-hidden className="pointer-events-none absolute -top-16 -right-16 size-56 rounded-full border-[28px] border-white/10" />
-        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
-            <h1 className="text-[28px] font-bold tracking-[-0.02em] break-words sm:text-[36px]">{title}</h1>
-            {description ? <div className="mt-2 max-w-2xl text-[15px] leading-relaxed text-white/85 sm:text-[16px]">{description}</div> : null}
+            <h1 className="text-[24px] leading-tight font-bold tracking-[-0.02em] break-words sm:text-[36px]">{title}</h1>
+            {description ? <div className="mt-1.5 line-clamp-2 max-w-2xl text-[14px] leading-relaxed text-white/85 sm:mt-2 sm:line-clamp-none sm:text-[16px]">{description}</div> : null}
           </div>
-          {actions ? <div className="hero-actions no-print flex flex-wrap items-center gap-2 rounded-2xl bg-white/10 p-1.5 ring-1 ring-white/20">{actions}</div> : null}
+          {actions ? <div className="hero-actions no-print flex flex-wrap items-center gap-2 self-start rounded-2xl bg-white/10 p-1 ring-1 ring-white/20 sm:p-1.5">{actions}</div> : null}
         </div>
       </div>
     </header>
@@ -81,14 +81,14 @@ export function CardLink({ href, children = "View all" }: { href: string; childr
 export function Stat({ label, value, note, href }: { label: string; value: ReactNode; note?: ReactNode; href?: string }) {
   const body = (
     <>
-      <p className="text-[14px] font-medium text-muted-foreground">{label}</p>
-      <p className="mt-4 text-[clamp(22px,6.2vw,30px)] leading-none font-extrabold tracking-tight break-words text-primary tabular-nums" style={{ fontFamily: "var(--font-display)" }}>
+      <p className="truncate text-[13px] font-medium text-muted-foreground sm:text-[14px]">{label}</p>
+      <p className="mt-2 text-[clamp(22px,6.2vw,30px)] sm:mt-4 leading-none font-extrabold tracking-tight break-words text-primary tabular-nums" style={{ fontFamily: "var(--font-display)" }}>
         {value}
       </p>
-      {note ? <p className="mt-2 text-[13px] leading-snug text-muted-foreground">{note}</p> : null}
+      {note ? <p className="mt-1 truncate text-[12px] leading-snug text-muted-foreground sm:mt-2 sm:text-[13px]">{note}</p> : null}
     </>
   );
-  const cls = `group relative block h-full overflow-hidden rounded-2xl border border-border ${CARD_SURFACE} bg-background p-5`;
+  const cls = `group relative block h-full overflow-hidden rounded-2xl border border-border ${CARD_SURFACE} bg-background p-3.5 sm:p-5`;
   return href ? (
     <Link href={href} className={`${cls} ${CARD_HOVER}`} data-stat={label}>
       {body}

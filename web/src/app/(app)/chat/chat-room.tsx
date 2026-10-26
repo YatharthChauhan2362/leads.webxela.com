@@ -221,7 +221,7 @@ export function ChatRoom({ roomId, meId, title, subtitle, rooms: initialRooms, s
   };
 
   return (
-    <div className="grid h-[calc(100dvh-8rem)] min-h-[480px] grid-cols-1 overflow-hidden rounded-2xl border border-border bg-background lg:h-[calc(100dvh-4rem)] lg:grid-cols-[300px_1fr]">
+    <div className="grid h-[calc(100dvh-10.5rem-env(safe-area-inset-bottom))] min-h-[420px] grid-cols-1 overflow-hidden rounded-2xl border border-border bg-background lg:h-[calc(100dvh-4rem)] lg:grid-cols-[300px_1fr]">
       <aside className="hidden min-h-0 flex-col border-r border-border lg:flex">
         <nav aria-label="Chats" className="min-h-0 flex-1 overflow-y-auto p-2">
           <RoomList rooms={rooms} active={roomId} />

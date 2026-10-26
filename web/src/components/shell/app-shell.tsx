@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
 import { Brand } from "@/components/brand";
-import { Avatar, BLUE_PANEL } from "@/components/ui/layout";
+import { Avatar } from "@/components/ui/layout";
 import { getBrand } from "@/lib/brand";
 import { hoursAgo, must, sb } from "@/lib/db";
 import { can, type Member } from "@/lib/session";
-import { MobileMenu, NavLinks, type NavGroup } from "./nav-links";
+import { BottomTabs, NavLinks, type NavGroup, type TabItem } from "./nav-links";
+import { Pulse } from "./pulse";
 import { ActivityTracker } from "./activity-tracker";
 import { unreadTotal } from "@/lib/chat";
 import { Suspense } from "react";
@@ -17,11 +18,11 @@ function nav(newCount: number, member: Member | null, unread = 0, findCount = 0,
     // Members get only what they need to work their leads.
     return [
       {
-        label: "Work",
+        label: "",
         items: [
-          { href: "/", label: "Leads", count: newCount },
-          { href: "/notifications", label: "Notifications", count: unread },
+          { href: "/", label: "Leads", count: newCount, match: ["/leads"] },
           { href: "/chat", label: "Team chat", count: chat },
+          { href: "/notifications", label: "Notifications", count: unread },
           { href: "/search", label: "Search" },
           { href: "/feedback", label: "Feedback" },
         ],
@@ -30,16 +31,16 @@ function nav(newCount: number, member: Member | null, unread = 0, findCount = 0,
   }
   return [
     {
-      label: "Work",
+      label: "",
       items: [
         { href: "/dashboard", label: "Dashboard" },
-        { href: "/", label: "Leads", count: newCount },
-        { href: "/notifications", label: "Notifications", count: unread },
+        { href: "/", label: "Leads", count: newCount, match: ["/leads"] },
         { href: "/chat", label: "Team chat", count: chat },
+        { href: "/notifications", label: "Notifications", count: unread },
       ],
     },
     {
-      label: "Finding leads",
+      label: "Find leads",
       items: [
         { href: "/finds", label: "Daily finds", count: findCount },
         { href: "/search", label: "Search" },
@@ -47,42 +48,36 @@ function nav(newCount: number, member: Member | null, unread = 0, findCount = 0,
       ],
     },
     {
-      label: "Admin",
+      label: "Team",
       items: [
-        { href: "/team", label: "Team" },
+        { href: "/team", label: "Members" },
         { href: "/activity", label: "Activity" },
-        { href: "/preferences", label: "Preferences" },
-        { href: "/engines", label: "Search engines" },
-        { href: "/settings", label: "Searches and branding" },
         { href: "/feedback", label: "Feedback", count: openFeedback },
+        // One link for every setting; the pages share tabs.
+        { href: "/preferences", label: "Settings", match: ["/engines", "/settings"] },
       ],
     },
   ];
 }
 
+/** The phone tab bar: what each person uses most, one tap away. */
+function tabsFor(member: Member | null, n: { count: number; chat: number; unread: number }): TabItem[] {
+  const admin = !member || can(member, "admin");
+  return [
+    { href: "/", label: "Leads", count: n.count },
+    { href: "/chat", label: "Chat", count: n.chat },
+    { href: "/notifications", label: "Alerts", count: n.unread },
+    admin ? { href: "/dashboard", label: "Dashboard" } : { href: "/search", label: "Search" },
+  ];
+}
+
 type Last = { at: string; added: number } | null;
 
-function StatusCard({ last, company }: { last: Last; company: string }) {
-  return (
-    <div className="relative shrink-0 overflow-hidden rounded-2xl p-4 text-white shadow-[var(--shadow-glow)]" style={{ backgroundImage: BLUE_PANEL }}>
-      <div aria-hidden className="pointer-events-none absolute -top-10 -right-10 size-32 rounded-full border-[18px] border-white/10" />
-      <div className="relative">
-        <p className="text-[16px] leading-tight font-bold" style={{ fontFamily: "var(--font-display)" }}>
-          {company}
-        </p>
-        <p className="mt-1 text-[13px] text-white/85">
-          {last ? `Last check ${timeAgo(last.at)}, ${last.added} new` : "No check yet"}
-        </p>
-      </div>
-    </div>
-  );
-}
 
 function SideContent({ count, last, member, company, unread, finds, feedback = 0, chat = 0 }: { count: number; last: Last; member: Member | null; company: string; unread: number; finds: number; feedback?: number; chat?: number }) {
   return (
     <div className="flex min-h-full flex-col gap-6 [&>*]:shrink-0">
-      <StatusCard last={last} company={company} />
-      <nav aria-label="Main">
+      <nav aria-label="Pages">
         <NavLinks groups={nav(count, member, unread, finds, feedback, chat)} />
       </nav>
       {member ? (
@@ -91,6 +86,7 @@ function SideContent({ count, last, member, company, unread, finds, feedback = 0
             <Avatar name={member.name || member.email} />
             <span className="min-w-0">
               <span className="block truncate text-sm font-medium">{member.name || member.email}</span>
+              {can(member, "admin") ? <span className="block truncate text-[12px] text-muted-foreground">{company}, {last ? `checked ${timeAgo(last.at)}` : "no check yet"}</span> : null}
               <span className="block truncate text-[13px] text-muted-foreground">{ROLE_WORDS[member.role]}</span>
             </span>
           </div>
@@ -130,6 +126,7 @@ export async function AppShell({ children, member }: { children: ReactNode; memb
       {member ? (
         <Suspense fallback={null}>
           <ActivityTracker />
+          <Pulse />
         </Suspense>
       ) : null}
       <aside className="no-print sticky top-0 hidden h-dvh flex-col border-r border-border bg-background lg:flex">
@@ -141,13 +138,15 @@ export async function AppShell({ children, member }: { children: ReactNode; memb
         </div>
       </aside>
       <div className="min-w-0">
-        <header className="no-print sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background px-4 lg:hidden">
+        <header className="no-print sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-background/95 px-4 pt-[env(safe-area-inset-top)] backdrop-blur lg:hidden">
           <Brand />
-          <MobileMenu label="Open menu">
-            <SideContent count={count} last={last} member={member} company={brand.company} unread={unread} finds={finds} feedback={feedback} chat={chat} />
-          </MobileMenu>
         </header>
-        <main className="mx-auto w-full max-w-[1760px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>
+        <main className="mx-auto w-full max-w-[1760px] px-3 pt-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:px-6 lg:px-8 lg:py-8">{children}</main>
+        <BottomTabs
+          tabs={tabsFor(member, { count, chat, unread })}
+          groups={nav(count, member, unread, finds, feedback, chat)}
+          more={<SideContent count={count} last={last} member={member} company={brand.company} unread={unread} finds={finds} feedback={feedback} chat={chat} />}
+        />
       </div>
     </div>
   );

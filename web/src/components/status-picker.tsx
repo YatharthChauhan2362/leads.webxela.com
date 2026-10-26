@@ -1,12 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { changeStatus } from "@/app/actions";
 import { STATUS_WORDS } from "@/components/leads";
 
 /** Status that saves the moment you pick it. Lost asks for a short reason first. */
-export function StatusPicker({ id, status, label, wide = false }: { id: number; status: string; label: string; wide?: boolean }) {
+export function StatusPicker({ id, status, label, wide = false, idPrefix = "" }: { id: number; status: string; label: string; wide?: boolean; idPrefix?: string }) {
   const router = useRouter();
   const [value, setValue] = useState(status);
   const [saved, setSaved] = useState(status);
@@ -33,11 +33,11 @@ export function StatusPicker({ id, status, label, wide = false }: { id: number; 
 
   return (
     <div className={`flex flex-col gap-1.5 ${wide ? "w-full" : "min-w-[170px]"}`}>
-      <label className="sr-only" htmlFor={`status-${id}`}>
+      <label className="sr-only" htmlFor={`${idPrefix}status-${id}`}>
         {label}
       </label>
       <select
-        id={`status-${id}`}
+        id={`${idPrefix}status-${id}`}
         value={value}
         disabled={pending}
         onChange={(e) => {
@@ -62,11 +62,11 @@ export function StatusPicker({ id, status, label, wide = false }: { id: number; 
             save("lost", reason);
           }}
         >
-          <label className="sr-only" htmlFor={`lost-${id}`}>
+          <label className="sr-only" htmlFor={`${idPrefix}lost-${id}`}>
             Why it was lost
           </label>
           <input
-            id={`lost-${id}`}
+            id={`${idPrefix}lost-${id}`}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder="Why it was lost"
@@ -85,18 +85,4 @@ export function StatusPicker({ id, status, label, wide = false }: { id: number; 
       </p>
     </div>
   );
-}
-
-/** Pulls fresh data every few seconds while the tab is open, so teammates' changes show without a reload. */
-export function LiveRefresh({ seconds = 15 }: { seconds?: number }) {
-  const router = useRouter();
-  useEffect(() => {
-    const t = window.setInterval(() => {
-      // Never refresh while someone is typing or picking.
-      const typing = document.activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
-      if (document.visibilityState === "visible" && !typing) router.refresh();
-    }, seconds * 1000);
-    return () => window.clearInterval(t);
-  }, [router, seconds]);
-  return null;
 }

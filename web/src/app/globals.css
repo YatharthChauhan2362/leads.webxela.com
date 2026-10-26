@@ -276,3 +276,30 @@ body.gsc-overflow-hidden,
 .gsc-modal-background-image {
   display: none !important;
 }
+
+/* Phones: feel like an app. No grey flash on tap, no zoom when a field gets focus (iOS zooms under 16px),
+   no rubber band behind fixed bars, smooth momentum scrolling. */
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+body {
+  overscroll-behavior-y: none;
+}
+@media (max-width: 1023px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+  button,
+  a {
+    touch-action: manipulation;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}

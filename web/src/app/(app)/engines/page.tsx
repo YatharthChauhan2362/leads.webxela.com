@@ -1,4 +1,5 @@
 import { addEngine, remove, setKind, testEngine, toggle } from "./actions";
+import { SettingsTabs } from "@/components/settings-tabs";
 import { Flash } from "@/components/ui/flash";
 import { Field, Input, Select } from "@/components/ui/form";
 import { Badge, Card, CardHeader, PageHeader } from "@/components/ui/layout";
@@ -24,7 +25,8 @@ export default async function EnginesPage({ searchParams }: { searchParams: Prom
 
   return (
     <>
-      <PageHeader title="Search engines" description="Your Google Programmable Search engines. Add each one's name, kind and engine ID, and its tab appears on the Search page." />
+      <PageHeader title="Settings" description="Your Google Programmable Search engines. Add each one's name, kind and engine ID, and its tab appears on the Search page." />
+      <SettingsTabs active="engines" />
       <Flash searchParams={searchParams} />
 
       <div className="mb-6 flex flex-wrap gap-2">

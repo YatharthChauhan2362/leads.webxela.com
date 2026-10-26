@@ -283,7 +283,7 @@ try {
   await po.goto(BASE + `/?status=contract`);
   ok(/Yatri Test Lead One/.test(await text(po)), "Contract signed tab shows the lead");
   const nav2 = await po.locator("aside nav").innerText();
-  ok(/Dashboard/.test(nav2) && /Daily finds/.test(nav2) && !/My work|LinkedIn account/.test(nav2), "admin menu has dashboard, no My work or LinkedIn account");
+  ok(/Dashboard/.test(nav2) && /Daily finds/.test(nav2) && /Settings/.test(nav2) && !/My work|LinkedIn account|Preferences|Search engines/.test(nav2), "admin menu is short: one Settings link, no My work or LinkedIn account");
   // Mobile width no sideways scroll
   for (const w of [390, 820]) {
     await po.setViewportSize({ width: w, height: 900 });
@@ -293,6 +293,28 @@ try {
       ok(over <= 1, `${path} at ${w}px has no sideways scroll (${over})`);
     }
   }
+  // Phone: app style tab bar, lead cards, no zoom on fields
+  await pa.setViewportSize({ width: 390, height: 844 });
+  await pa.goto(BASE + "/?status=all");
+  ok(await pa.locator("nav[aria-label=Main] >> text=More").isVisible(), "phone shows the bottom tab bar");
+  ok(await pa.locator("ul.md\\:hidden > li").first().isVisible(), "phone shows leads as cards");
+  ok(!(await pa.locator("table").first().isVisible().catch(() => false)), "the wide table is hidden on phones");
+  ok((await pa.evaluate(() => getComputedStyle(document.querySelector("#q")).fontSize)) === "16px", "fields use 16px on phones, so iOS does not zoom");
+  await pa.goto(BASE + `/leads/${L1}`);
+  ok((await pa.locator("nav[aria-label=Main] a[aria-current=page]").innerText()).includes("Leads"), "a lead's page highlights the Leads tab");
+  await pa.locator("nav[aria-label=Main] button:has-text('More')").click();
+  ok(await pa.locator("[role=dialog][aria-label=More] >> text=Feedback").isVisible(), "More opens the full menu");
+  // Live without reload: B changes a lead while A watches the list
+  await pa.goto(BASE + "/?status=all");
+  await pa.evaluate(() => (window.__stay = 1));
+  await db.from("leads").update({ author: "Yatri Test Lead One Live" }).eq("id", L1);
+  await db.from("lead_events").insert({ lead_id: L1, member_id: B, member_name: "Test B", kind: "edited" });
+  await pa.waitForFunction(() => document.body.innerText.includes("Yatri Test Lead One Live"), null, { timeout: 12000 }).then(
+    () => ok(true, "A's list showed a change made elsewhere within seconds"),
+    () => ok(false, "A's list showed a change made elsewhere within seconds"),
+  );
+  ok(await pa.evaluate(() => window.__stay === 1), "...without reloading the page");
+
   const events = (await db.from("lead_events").select("kind").eq("lead_id", L1)).data.map((e) => e.kind);
   console.log("events on lead one:", events.join(", "));
 } catch (e) {
@@ -304,8 +326,8 @@ try {
   if (ids.length) { await db.from("lead_events").delete().in("lead_id", ids); await db.from("notifications").delete().in("lead_id", ids); await db.from("leads").delete().in("id", ids); }
   await db.from("notifications").delete().in("member_id", [A, B]);
   await db.from("feedback").delete().like("title", "Yatri test%");
-  await db.from("notifications").delete().eq("member_id", owner.id).like("title", "%Yatri Test%");
-  await db.from("notifications").delete().eq("member_id", owner.id).like("title", "%Yatri test%");
+  // Admins were told about test reports and leads: remove those for every admin.
+  await db.from("notifications").delete().or("title.ilike.%yatri test%,title.ilike.%from Test A%,title.ilike.%from Test B%,title.ilike.Test A %,title.ilike.Test B %");
   await db.from("activity").delete().in("member_id", [A, B]).then(() => {}, () => {});
   const del = await db.from("members").delete().like("email", "yatri-test-%");
   console.log("cleanup", ids.length, "leads", del.error?.message ?? "members removed");

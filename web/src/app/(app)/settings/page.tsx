@@ -1,4 +1,5 @@
 import { rescoreAll, saveBranding, saveSettings } from "@/app/actions";
+import { SettingsTabs } from "@/components/settings-tabs";
 import { Flash } from "@/components/ui/flash";
 import { Field, Input, Textarea } from "@/components/ui/form";
 import { Callout, Card, CardHeader, PageHeader } from "@/components/ui/layout";
@@ -18,7 +19,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const settings = await getSettings();
   return (
     <>
-      <PageHeader title="Searches and branding" description="The team's search phrases and watched profiles, plus your app's name, colour and logo." />
+      <PageHeader title="Settings" description="The team's search phrases and watched profiles, plus your app's name, colour and logo." />
+      <SettingsTabs active="settings" />
       <Flash searchParams={searchParams} />
 
       <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">

@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { nameOf, roomFor } from "@/lib/chat";
 import { must, sb } from "@/lib/db";
-import { requireMember, type Member } from "@/lib/session";
+import { can, requireMember, type Member } from "@/lib/session";
 
 function go(room: number | null, msg: string, kind: "ok" | "error" = "ok"): never {
   revalidatePath("/chat");
@@ -26,6 +26,28 @@ async function activeIds(ids: string[]) {
 
 async function systemNote(roomId: number, me: Member, text: string) {
   await sb().from("chat_messages").insert({ room_id: roomId, member_id: null, member_name: nameOf(me), body: text });
+}
+
+/**
+ * A group you may manage: you are its admin, or a team admin. Team admins can add and remove people
+ * in any group without being in it, but still cannot read its messages.
+ */
+async function manageable(me: Member, roomId: number) {
+  const room = must(await sb().from("chat_rooms").select("id, kind, name").eq("id", roomId).maybeSingle()) as { id: number; kind: string; name: string | null } | null;
+  if (!room || room.kind !== "group") return null;
+  const mine = must(await sb().from("chat_members").select("is_admin").eq("room_id", roomId).eq("member_id", me.id).maybeSingle()) as { is_admin: boolean } | null;
+  if (mine?.is_admin || can(me, "admin")) return { ...room, inIt: Boolean(mine) };
+  return mine ? false : null;
+}
+
+/** Where to go after managing: back to the group if you are in it, else the manage list. */
+const after = (room: { id: number; inIt: boolean } | null | false, formData: FormData) => (formData.get("from") === "manage" || (room && !room.inIt) ? null : (room ? room.id : null));
+function goManage(formData: FormData, room: { id: number; inIt: boolean } | false | null, msg: string, kind: "ok" | "error" = "ok"): never {
+  if (formData.get("from") === "manage") {
+    revalidatePath("/chat");
+    redirect(`/chat?manage=1&${kind}=${encodeURIComponent(msg)}`);
+  }
+  go(after(room, formData), msg, kind);
 }
 
 const People = (f: FormData) => z.array(z.string().uuid()).max(100).parse(f.getAll("people"));
@@ -62,14 +84,14 @@ export async function startDirect(formData: FormData) {
 export async function addToGroup(formData: FormData) {
   const me = await signedIn();
   const roomId = z.coerce.number().int().positive().parse(formData.get("room"));
-  const room = await roomFor(me, roomId);
-  if (!room || room.kind !== "group") go(null, "Not found.", "error");
-  if (!room.is_admin) go(roomId, "Only the group's admins can add people.", "error");
+  const room = await manageable(me, roomId);
+  if (room === null) go(null, "Not found.", "error");
+  if (room === false) go(roomId, "Only the group's admins can add people.", "error");
   const people = await activeIds(People(formData));
-  if (!people.length) go(roomId, "Pick at least one person.", "error");
-  await sb().from("chat_members").upsert(people.map((member_id) => ({ room_id: roomId, member_id })), { onConflict: "room_id,member_id", ignoreDuplicates: true });
+  if (!people.length) goManage(formData, room, "Pick at least one person.", "error");
+  await sb().from("chat_members").upsert(people.map((member_id) => ({ room_id: roomId, member_id, is_admin: false })), { onConflict: "room_id,member_id", ignoreDuplicates: true });
   await systemNote(roomId, me, `${nameOf(me)} added ${people.length} ${people.length === 1 ? "person" : "people"}.`);
-  go(roomId, "Added.");
+  goManage(formData, room, "Added.");
 }
 
 /** Group admins remove someone, or anyone leaves. A group with no admin left passes admin to the longest member. */
@@ -77,9 +99,10 @@ export async function removeFromGroup(formData: FormData) {
   const me = await signedIn();
   const roomId = z.coerce.number().int().positive().parse(formData.get("room"));
   const who = z.string().uuid().parse(formData.get("person"));
-  const room = await roomFor(me, roomId);
-  if (!room || room.kind !== "group") go(null, "Not found.", "error");
-  if (who !== me.id && !room.is_admin) go(roomId, "Only the group's admins can remove people.", "error");
+  const room = who === me.id ? await roomFor(me, roomId) : null;
+  const managed = who === me.id ? null : await manageable(me, roomId);
+  if (who === me.id ? !room || room.kind !== "group" : managed === null) go(null, "Not found.", "error");
+  if (managed === false) go(roomId, "Only the group's admins can remove people.", "error");
   const gone = must(await sb().from("members").select("name, email").eq("id", who).maybeSingle()) as { name: string | null; email: string } | null;
   must(await sb().from("chat_members").delete().eq("room_id", roomId).eq("member_id", who));
   const left = must(await sb().from("chat_members").select("member_id, is_admin").eq("room_id", roomId).order("joined_at")) as { member_id: string; is_admin: boolean }[];
@@ -90,7 +113,7 @@ export async function removeFromGroup(formData: FormData) {
   if (!left.some((l) => l.is_admin)) await sb().from("chat_members").update({ is_admin: true }).eq("room_id", roomId).eq("member_id", left[0].member_id);
   await systemNote(roomId, me, who === me.id ? `${nameOf(me)} left.` : `${nameOf(me)} removed ${gone ? nameOf(gone) : "someone"}.`);
   if (who === me.id) go(null, "You left the group.");
-  go(roomId, "Removed.");
+  goManage(formData, managed ?? null, "Removed.");
 }
 
 /** Group admins rename the group. */
@@ -98,24 +121,24 @@ export async function renameGroup(formData: FormData) {
   const me = await signedIn();
   const roomId = z.coerce.number().int().positive().parse(formData.get("room"));
   const name = z.string().trim().min(1).max(80).safeParse(formData.get("name"));
-  const room = await roomFor(me, roomId);
-  if (!room || room.kind !== "group") go(null, "Not found.", "error");
-  if (!room.is_admin) go(roomId, "Only the group's admins can rename it.", "error");
-  if (!name.success) go(roomId, "Give the group a name.", "error");
+  const room = await manageable(me, roomId);
+  if (room === null) go(null, "Not found.", "error");
+  if (room === false) go(roomId, "Only the group's admins can rename it.", "error");
+  if (!name.success) goManage(formData, room, "Give the group a name.", "error");
   must(await sb().from("chat_rooms").update({ name: name.data }).eq("id", roomId));
   await systemNote(roomId, me, `${nameOf(me)} renamed the group to ${name.data}.`);
-  go(roomId, "Renamed.");
+  goManage(formData, room, "Renamed.");
 }
 
 /** Group admins delete the group with all its messages and files. */
 export async function deleteGroup(formData: FormData) {
   const me = await signedIn();
   const roomId = z.coerce.number().int().positive().parse(formData.get("room"));
-  const room = await roomFor(me, roomId);
-  if (!room || room.kind !== "group") go(null, "Not found.", "error");
-  if (!room.is_admin) go(roomId, "Only the group's admins can delete it.", "error");
+  const room = await manageable(me, roomId);
+  if (room === null) go(null, "Not found.", "error");
+  if (room === false) go(roomId, "Only the group's admins can delete it.", "error");
   const files = (must(await sb().from("chat_messages").select("file_path").eq("room_id", roomId).not("file_path", "is", null)) as { file_path: string }[]).map((f) => f.file_path);
   if (files.length) await sb().storage.from("chat").remove(files);
   must(await sb().from("chat_rooms").delete().eq("id", roomId));
-  go(null, "Group deleted.");
+  goManage(formData, null, "Group deleted.");
 }
