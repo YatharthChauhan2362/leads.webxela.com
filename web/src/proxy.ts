@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 // Fast first check: once Google or Zoho sign in is set up, pages need a session cookie.
 // The real check (signature, active member, role) runs on every page and action through requireMember().
 // /api routes check the extension key or the session themselves.
-const PUBLIC = [/^\/login/, /^\/auth\//, /^\/api\//, /^\/logos\//, /^\/yatri-leads-extension\.zip$/];
+const PUBLIC = [/^\/login/, /^\/auth\//, /^\/api\//, /^\/logos\//, /^\/yatri-leads-extension\.zip$/, /^\/manifest\.webmanifest$/];
 
 export function proxy(req: NextRequest) {
   const authOn = Boolean(process.env.GOOGLE_CLIENT_ID || process.env.ZOHO_CLIENT_ID);
