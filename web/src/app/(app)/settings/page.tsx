@@ -36,7 +36,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       </div>
 
       <Card className="mb-6">
-        <CardHeader title="Branding" description="Your app name, company, colour and logo. The colour replaces the blue on every page, button and header." />
+        <CardHeader title="Branding" description="Your app name, company, colour, logo, and the title and icon on the browser tab. The colour replaces the blue on every page, button and header." />
         <form action={saveBranding} className="space-y-5">
           <input type="hidden" name="back" value="/settings" />
           <div className="grid grid-cols-1 gap-x-4 gap-y-5 sm:grid-cols-2 xl:grid-cols-5">
@@ -55,6 +55,24 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             <Field label="Logo" htmlFor="logo" hint="Square PNG, JPG or WebP, under 1 MB." optional>
               <input id="logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp" className="block w-full text-[14px]" />
             </Field>
+          </div>
+          <div className="grid grid-cols-1 gap-x-4 gap-y-5 border-t border-border pt-5 sm:grid-cols-2">
+            <Field label="Browser tab title" htmlFor="tab_title" optional hint="The words on the browser tab. Empty uses the app name.">
+              <Input id="tab_title" name="tab_title" defaultValue={settings.tab_title} maxLength={60} placeholder={`${settings.brand_first} ${settings.brand_second}`.trim()} />
+            </Field>
+            <Field label="Browser tab icon" htmlFor="favicon" optional hint="Square PNG, ICO, JPG or WebP, under 256 KB. Empty uses the logo.">
+              <div className="flex items-center gap-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={settings.favicon_url || settings.logo_url || "/logo.png"} alt="Current tab icon" width={32} height={32} className="size-8 shrink-0 rounded-md border border-border object-contain" />
+                <input id="favicon" name="favicon" type="file" accept="image/png,image/x-icon,image/vnd.microsoft.icon,image/jpeg,image/webp" className="block w-full min-w-0 text-[14px]" />
+              </div>
+            </Field>
+            {settings.favicon_url ? (
+              <label className="flex items-center gap-2 text-[14px] sm:col-span-2">
+                <input type="checkbox" name="favicon_reset" value="1" className="size-5 accent-primary" />
+                Go back to using the logo as the tab icon
+              </label>
+            ) : null}
           </div>
           <div className="flex flex-wrap gap-2">
             <SubmitButton pendingText="Saving...">Save branding</SubmitButton>

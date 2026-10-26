@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { getSettings } from "./db";
 
-export type Brand = { first: string; second: string; company: string; color: string; hover: string; logo: string };
+export type Brand = { first: string; second: string; company: string; color: string; hover: string; logo: string; favicon: string; tabTitle: string };
 
 /** Hex colour to relative luminance (WCAG). */
 function luminance(hex: string) {
@@ -36,5 +36,7 @@ export const getBrand = cache(async (): Promise<Brand> => {
     color,
     hover: darker(color),
     logo: s?.logo_url || "/logo.png",
+    favicon: s?.favicon_url || s?.logo_url || "/logo.png",
+    tabTitle: s?.tab_title || `${s?.brand_first || "Yatri"} ${s?.brand_second || "Leads"}`.trim(),
   };
 });

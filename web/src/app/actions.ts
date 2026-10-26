@@ -15,14 +15,14 @@ import { whiteContrast } from "@/lib/brand";
 import { assignTo, pickBde } from "@/lib/assign";
 import { recordEvent, tellOthers } from "@/lib/history";
 import { findDuplicates } from "@/lib/duplicates";
-import { STATUS_WORDS } from "@/components/leads";
+import { STATUS_WORDS, money } from "@/components/leads";
 import { pollSources } from "@/lib/sources";
 
 const STATUSES = ["new", "contacted", "interested", "proposal", "contract", "paid", "lost"] as const;
 
-type LeadOwners = { id: number; author: string | null; status: string; assigned_to: string | null; captured_by: string | null; follow_up_at: string | null; deal_value: number | null; lost_reason: string | null };
+type LeadOwners = { id: number; author: string | null; status: string; assigned_to: string | null; captured_by: string | null; follow_up_at: string | null; deal_value: number | null; deal_currency: string | null; lost_reason: string | null };
 async function owners(id: number) {
-  return must(await sb().from("leads").select("id, author, status, assigned_to, captured_by, follow_up_at, deal_value, lost_reason").eq("id", id).single()) as LeadOwners;
+  return must(await sb().from("leads").select("id, author, status, assigned_to, captured_by, follow_up_at, deal_value, deal_currency, lost_reason").eq("id", id).single()) as LeadOwners;
 }
 const Id = z.coerce.number().int().positive();
 
@@ -81,11 +81,20 @@ export async function setDealValue(formData: FormData) {
   const raw = String(formData.get("deal_value") ?? "").replace(/[^0-9.]/g, "");
   const value = raw ? z.coerce.number().min(0).max(1e12).safeParse(raw) : null;
   if (value && !value.success) back(formData, "Deal value must be a number.", "error");
-  const before = await owners(id);
+  // A value always comes with its currency.
+  const currency = String(formData.get("deal_currency") ?? "").toUpperCase();
   const next = value?.success ? value.data : null;
-  if (Number(before.deal_value ?? -1) === Number(next ?? -1)) back(formData, "No change.");
-  must(await sb().from("leads").update({ deal_value: next }).eq("id", id));
-  await recordEvent(id, me, "deal", before.deal_value === null ? null : String(before.deal_value), next === null ? "cleared" : String(next));
+  if (next !== null && !(/^[A-Z]{3}$/.test(currency) && Intl.supportedValuesOf("currency").includes(currency))) back(formData, "Pick the currency for the deal value.", "error");
+  const before = await owners(id);
+  if (Number(before.deal_value ?? -1) === Number(next ?? -1) && (next === null || before.deal_currency === currency)) back(formData, "No change.");
+  must(await sb().from("leads").update({ deal_value: next, deal_currency: next === null ? null : currency }).eq("id", id));
+  await recordEvent(
+    id,
+    me,
+    "deal",
+    before.deal_value === null ? null : `${before.deal_currency ?? "INR"} ${before.deal_value}`,
+    next === null ? "cleared" : `${currency} ${next}`,
+  );
   await logActivity(me, "status", { target: `lead ${id}`, detail: `Deal value ${next ?? "cleared"}` });
   back(formData, "Deal value saved.");
 }
@@ -204,7 +213,7 @@ export async function assignLead(formData: FormData) {
 export async function saveBranding(formData: FormData) {
   const me = await requireMember("admin");
   if (formData.get("reset") === "1") {
-    await setSettings({ brand_first: "Yatri", brand_second: "Leads", company_name: "Yatri Cloud", brand_color: "#0080FF", logo_url: "/logo.png" });
+    await setSettings({ brand_first: "Yatri", brand_second: "Leads", company_name: "Yatri Cloud", brand_color: "#0080FF", logo_url: "/logo.png", favicon_url: "", tab_title: "" });
     await logActivity(me, "settings", { detail: "Branding reset" });
     back(formData, "Branding is back to the original.");
   }
@@ -214,6 +223,7 @@ export async function saveBranding(formData: FormData) {
       brand_second: z.string().trim().max(30),
       company_name: z.string().trim().min(1).max(60),
       brand_color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+      tab_title: z.string().trim().max(60).default(""),
     })
     .safeParse(Object.fromEntries(formData));
   if (!r.success) back(formData, "Fill in the app name and company, and pick a colour.", "error");
@@ -229,8 +239,21 @@ export async function saveBranding(formData: FormData) {
     if (up.error) back(formData, `Could not upload the logo: ${up.error.message}`, "error");
     logo_url = sb().storage.from("brand").getPublicUrl(path).data.publicUrl;
   }
-  await setSettings({ ...r.data, brand_color: r.data.brand_color.toUpperCase(), ...(logo_url ? { logo_url } : {}) });
-  await logActivity(me, "settings", { detail: `Branding: ${r.data.brand_first} ${r.data.brand_second}, ${r.data.brand_color}${logo_url ? ", new logo" : ""}` });
+  // The browser tab icon. No SVG: it can carry scripts.
+  let favicon_url: string | undefined;
+  const icon = formData.get("favicon");
+  if (icon instanceof File && icon.size > 0) {
+    const types: Record<string, string> = { "image/png": "png", "image/x-icon": "ico", "image/vnd.microsoft.icon": "ico", "image/jpeg": "jpg", "image/webp": "webp" };
+    if (!types[icon.type]) back(formData, "The tab icon must be a PNG, ICO, JPG or WebP image.", "error");
+    if (icon.size > 256 * 1024) back(formData, "The tab icon must be under 256 KB.", "error");
+    const path = `favicon-${Date.now()}.${types[icon.type]}`;
+    const up = await sb().storage.from("brand").upload(path, icon, { contentType: icon.type, upsert: false });
+    if (up.error) back(formData, `Could not upload the tab icon: ${up.error.message}`, "error");
+    favicon_url = sb().storage.from("brand").getPublicUrl(path).data.publicUrl;
+  }
+  if (formData.get("favicon_reset") === "1") favicon_url = "";
+  await setSettings({ ...r.data, brand_color: r.data.brand_color.toUpperCase(), ...(logo_url ? { logo_url } : {}), ...(favicon_url !== undefined ? { favicon_url } : {}) });
+  await logActivity(me, "settings", { detail: `Branding: ${r.data.brand_first} ${r.data.brand_second}, ${r.data.brand_color}${logo_url ? ", new logo" : ""}${favicon_url ? ", new tab icon" : ""}` });
   back(formData, "Branding saved.");
 }
 
@@ -329,6 +352,9 @@ const LeadFields = z.object({
   text: z.string().trim().min(5, "Write what they need.").max(5000),
   post_url: z.union([z.literal(""), z.string().trim().url().max(1000)]),
   source: z.enum(["manual", "linkedin", "referral", "email", "call", "event", "website", "other"]).default("manual"),
+  // Their budget, if they said one. An amount always needs its currency.
+  budget_amount: z.string().trim().max(20).optional(),
+  budget_currency: z.string().trim().max(3).optional(),
 });
 
 const listOf = (v: string) =>
@@ -344,6 +370,11 @@ export async function createLead(formData: FormData) {
   const r = LeadFields.safeParse(Object.fromEntries(formData));
   if (!r.success) back(formData, r.error.issues[0]?.message ?? "Check the form.", "error");
   const d = r.data;
+  const amount = (d.budget_amount ?? "").replace(/[^0-9.]/g, "");
+  const currency = (d.budget_currency ?? "").toUpperCase();
+  if (amount && !(Number(amount) > 0)) back(formData, "Budget must be a number.", "error");
+  if (amount && !Intl.supportedValuesOf("currency").includes(currency)) back(formData, "Pick the currency for the budget.", "error");
+  const budget = amount ? money(Number(amount), currency) : null;
   const res = await ingestPosts(
     [
       {
@@ -361,7 +392,12 @@ export async function createLead(formData: FormData) {
   const lead = must(await sb().from("leads").select("id").eq("author", d.author).order("captured_at", { ascending: false }).limit(1).maybeSingle()) as { id: number } | null;
   if (lead) {
     // Contact details typed in by hand are known for sure.
-    must(await sb().from("leads").update({ emails: listOf(d.emails), phones: listOf(d.phones), contact_note: d.emails || d.phones ? "Added by hand" : null }).eq("id", lead.id));
+    must(
+      await sb()
+        .from("leads")
+        .update({ emails: listOf(d.emails), phones: listOf(d.phones), contact_note: d.emails || d.phones ? "Added by hand" : null, ...(budget ? { budget } : {}) })
+        .eq("id", lead.id),
+    );
     await recordEvent(lead.id, me, "created", null, d.source);
   }
   await logActivity(me, "add_post", { detail: `Added a lead by hand: ${d.author}` });

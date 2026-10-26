@@ -83,5 +83,33 @@ export function ContactCell({
   );
 }
 
-/** Rupees, written the Indian way. */
-export const money = (n: number) => `Rs ${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+/** Every currency the runtime knows, as ISO codes with their names, for the deal value picker. */
+export const CURRENCIES: { code: string; name: string }[] = (() => {
+  const names = new Intl.DisplayNames(["en"], { type: "currency" });
+  return Intl.supportedValuesOf("currency")
+    .map((code) => ({ code, name: names.of(code) ?? code }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+})();
+
+/** An amount in its own currency: ₹50,000 for rupees, USD 2,000 for the rest, since "$" alone is ambiguous. */
+export function money(n: number, currency = "INR") {
+  try {
+    return new Intl.NumberFormat("en-IN", { style: "currency", currency, currencyDisplay: currency === "INR" ? "symbol" : "code", minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(n);
+  } catch {
+    return `${currency} ${n.toLocaleString("en-IN")}`;
+  }
+}
+
+/** Totals in several currencies, never added across currencies: "₹50,000 + USD 2,000". */
+export function moneyTotals(rows: { value: number; currency: string | null }[]) {
+  const by = new Map<string, number>();
+  for (const r of rows) by.set(r.currency ?? "INR", (by.get(r.currency ?? "INR") ?? 0) + r.value);
+  return [...by].map(([c, v]) => money(v, c)).join(" + ");
+}
+
+/** A deal event's value, saved as "USD 2000" (older ones are just "50000", in rupees). */
+export function dealWords(v: string | null) {
+  if (!v || v === "cleared") return "nothing";
+  const [a, b] = v.split(" ");
+  return b === undefined ? money(Number(a)) : money(Number(b), a);
+}

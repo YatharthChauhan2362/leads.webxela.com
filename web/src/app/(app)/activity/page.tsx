@@ -181,6 +181,7 @@ const FEATURES: [RegExp, string][] = [
   [/^\/leads\//, "Lead details"],
   [/^\/people/, "People"],
   [/^\/dashboard/, "Dashboard"],
+  [/^\/feedback/, "Feedback"],
   [/^\/team/, "Team"],
   [/^\/settings/, "Searches and alerts"],
   [/^\/activity/, "Activity"],

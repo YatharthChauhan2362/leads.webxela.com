@@ -74,6 +74,9 @@ export const DEFAULT_SETTINGS = {
   company_name: "Yatri Cloud",
   brand_color: "#0080FF",
   logo_url: "/logo.png",
+  // Browser tab: the small icon and the title. Empty means the logo and the app name.
+  favicon_url: "",
+  tab_title: "",
 };
 
 export type SettingKey = keyof typeof DEFAULT_SETTINGS;

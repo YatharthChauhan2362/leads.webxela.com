@@ -119,6 +119,56 @@ export type Database = {
         }
         Relationships: []
       }
+      feedback: {
+        Row: {
+          admin_note: string | null
+          created_at: string
+          details: string
+          id: number
+          kind: string
+          member_id: string | null
+          member_name: string | null
+          page: string | null
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          admin_note?: string | null
+          created_at?: string
+          details?: string
+          id?: never
+          kind: string
+          member_id?: string | null
+          member_name?: string | null
+          page?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          admin_note?: string | null
+          created_at?: string
+          details?: string
+          id?: never
+          kind?: string
+          member_id?: string | null
+          member_name?: string | null
+          page?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "feedback_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_events: {
         Row: {
           at: string
@@ -181,6 +231,7 @@ export type Database = {
           contact_checked_at: string | null
           contact_note: string | null
           contacted_at: string | null
+          deal_currency: string | null
           deal_value: number | null
           emails: string
           follow_up_at: string | null
@@ -222,6 +273,7 @@ export type Database = {
           contact_checked_at?: string | null
           contact_note?: string | null
           contacted_at?: string | null
+          deal_currency?: string | null
           deal_value?: number | null
           emails?: string
           follow_up_at?: string | null
@@ -263,6 +315,7 @@ export type Database = {
           contact_checked_at?: string | null
           contact_note?: string | null
           contacted_at?: string | null
+          deal_currency?: string | null
           deal_value?: number | null
           emails?: string
           follow_up_at?: string | null

@@ -119,7 +119,7 @@ export async function LeadsView({ searchParams, mode }: { searchParams: Promise<
         title={finds ? "Daily finds" : "Leads"}
         description={
           finds
-            ? "Everything collected automatically by the extension, the server and the Claude routine. Add the good ones to Leads."
+            ? "Posts from people asking for a developer or agency, collected by the server and the Claude routine. Add the good ones to Leads."
             : all
               ? "Every lead your team is working. Pick a person to see only theirs."
               : "Leads you added and leads given to you. Update the status as you go."
@@ -230,10 +230,10 @@ export async function LeadsView({ searchParams, mode }: { searchParams: Promise<
       {leads.length === 0 ? (
         <EmptyState
           title={finds ? "No daily finds here" : "No leads here yet"}
-          description={finds ? "The extension, the server and the Claude routine add finds here as they collect posts." : "Add a lead from a call, an email or LinkedIn, or change the filters above."}
+          description={finds ? "The server and the Claude routine add posts here as they find clients." : "Add a lead from a call, an email or LinkedIn, or change the filters above."}
           action={
-            <Link href={finds ? "/extension" : "/leads/new"} className={buttonClass("primary")}>
-              {finds ? "Set up the extension" : "New lead"}
+            <Link href={finds ? "/search" : "/leads/new"} className={buttonClass("primary")}>
+              {finds ? "Open search" : "New lead"}
             </Link>
           }
         />

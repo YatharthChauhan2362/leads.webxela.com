@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { addToLeads, assignLead, deleteLeads, saveNotes, setDealValue, setFollowUp, updateLead } from "@/app/actions";
-import { ContactCell, SOURCES, STATUS_WORDS, ScoreBadge, money } from "@/components/leads";
+import { CURRENCIES, ContactCell, SOURCES, STATUS_WORDS, ScoreBadge, dealWords, money } from "@/components/leads";
 import { timeAgo } from "@/components/shell/app-shell";
 import { buttonClass } from "@/components/ui/button";
 import { Flash } from "@/components/ui/flash";
@@ -25,7 +25,7 @@ function said(e: Event) {
       if (e.to_value?.startsWith("lost:")) return `marked it Lost: ${e.to_value.slice(5)}`;
       return `moved it from ${word(e.from_value?.split(":")[0] ?? null)} to ${word(e.to_value)}`;
     case "deal":
-      return e.to_value === "cleared" ? "cleared the deal value" : `set the deal value to ${money(Number(e.to_value))}`;
+      return e.to_value === "cleared" ? "cleared the deal value" : `set the deal value to ${dealWords(e.to_value)}`;
     case "duplicate":
       return `added it, but ${e.to_value} already had this person`;
     case "assigned":
@@ -103,7 +103,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
               <Badge tone={lead.status === "paid" ? "green" : lead.status === "lost" ? "red" : "blue"}>{STATUS_WORDS[lead.status] ?? lead.status}</Badge>
               <ScoreBadge score={lead.score} />
               <Badge>{SOURCES[lead.source] ?? lead.source}</Badge>
-              {lead.deal_value !== null ? <Badge tone="green">{money(Number(lead.deal_value))}</Badge> : null}
+              {lead.deal_value !== null ? <Badge tone="green">{money(Number(lead.deal_value), lead.deal_currency ?? "INR")}</Badge> : null}
             </div>
             {lead.status === "lost" && lead.lost_reason ? <p className="mb-3 text-[15px] text-danger">Lost: {lead.lost_reason}</p> : null}
             <p className="text-[15px] leading-relaxed whitespace-pre-line">{lead.text}</p>
@@ -186,10 +186,23 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
             <form action={setDealValue} className="space-y-2 border-t border-border pt-3">
               <input type="hidden" name="id" value={lead.id} />
               <input type="hidden" name="back" value={back} />
-              <Field label="Deal value in rupees" htmlFor="deal_value" optional hint="When the contract is signed.">
-                <div className="flex gap-2">
-                  <Input id="deal_value" name="deal_value" inputMode="decimal" defaultValue={lead.deal_value ?? ""} placeholder="50000" maxLength={16} />
-                  <SubmitButton variant="secondary" pendingText="Saving...">Save</SubmitButton>
+              <Field label="Deal value" htmlFor="deal_value" optional hint="Pick the currency every time you set an amount.">
+                <div className="space-y-2">
+                  <label className="sr-only" htmlFor="deal_currency">
+                    Currency
+                  </label>
+                  <select id="deal_currency" name="deal_currency" defaultValue={lead.deal_currency ?? ""} className={`${select} w-full`}>
+                    <option value="">Pick a currency</option>
+                    {CURRENCIES.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.code}, {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="flex gap-2">
+                    <Input id="deal_value" name="deal_value" inputMode="decimal" defaultValue={lead.deal_value ?? ""} placeholder="50000" maxLength={16} />
+                    <SubmitButton variant="secondary" pendingText="Saving...">Save</SubmitButton>
+                  </div>
                 </div>
               </Field>
             </form>

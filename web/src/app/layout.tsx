@@ -9,7 +9,7 @@ const bricolage = localFont({ src: "./fonts/bricolage-grotesque-latin-wght-norma
 
 export async function generateMetadata(): Promise<Metadata> {
   const b = await getBrand();
-  return { title: `${b.first} ${b.second}`, description: "Find people who need a project built, the moment they post." };
+  return { title: b.tabTitle, description: "Find people who need a project built, the moment they post.", icons: { icon: b.favicon, apple: b.favicon } };
 }
 
 export const dynamic = "force-dynamic";
