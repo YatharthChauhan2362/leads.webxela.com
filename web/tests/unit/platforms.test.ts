@@ -9,8 +9,11 @@ const keeps = (p: string, m: string, link: string) => {
 const blank = { what: "", role: "", company: "", place: "", choice: "" };
 
 describe("social search queries", () => {
-  it("every mode aims at its own site", () => {
-    for (const p of PLATFORMS) for (const m of p.modes) expect(m.build({ ...blank, what: "shop", role: "founder" })).toMatch(/site:/);
+  it("every platform search aims at its own site", () => {
+    for (const p of PLATFORMS) for (const m of p.modes) if (m.key !== "contacts") expect(m.build({ ...blank, what: "shop", role: "founder" })).toMatch(/site:/);
+  });
+  it("contact details search the whole web for the person", () => {
+    expect(mode("web", "contacts").build({ ...blank, what: "Asha Rao", company: "Acme" })).toBe(`"Asha Rao" "Acme" (email OR contact OR phone)`);
   });
   it("commas become OR, so one search covers several words", () => {
     expect(mode("instagram", "business").build({ ...blank, what: "bakery, cake shop" })).toContain(`(bakery OR "cake shop")`);
