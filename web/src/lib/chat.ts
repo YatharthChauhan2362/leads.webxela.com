@@ -92,11 +92,11 @@ export async function myRooms(me: Member): Promise<RoomRow[]> {
 export async function unreadTotal(me: Member) {
   await joinEveryone(me);
   const links = must(await sb().from("chat_members").select("room_id, last_read_id").eq("member_id", me.id)) as { room_id: number; last_read_id: number }[];
-  let n = 0;
-  for (const l of links) {
-    n += (await sb().from("chat_messages").select("id", { count: "exact", head: true }).eq("room_id", l.room_id).gt("id", l.last_read_id).neq("member_id", me.id).is("deleted_at", null)).count ?? 0;
-  }
-  return n;
+  // One count per room, all at once.
+  const counts = await Promise.all(
+    links.map((l) => sb().from("chat_messages").select("id", { count: "exact", head: true }).eq("room_id", l.room_id).gt("id", l.last_read_id).neq("member_id", me.id).is("deleted_at", null)),
+  );
+  return counts.reduce((n, r) => n + (r.count ?? 0), 0);
 }
 
 /** Where a file for this room and person is stored. Only paths under it are accepted back. */

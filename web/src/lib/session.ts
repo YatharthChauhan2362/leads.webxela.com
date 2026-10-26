@@ -1,6 +1,7 @@
 import "server-only";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { must, sb } from "./db";
 import type { Database } from "./database.types";
@@ -53,12 +54,13 @@ export function newApiKey() {
 }
 
 /** The signed in, active member, or null. */
-export async function currentMember(): Promise<Member | null> {
+// Read once per request: the layout, the menu and the page all ask, and each ask was a trip to the database.
+export const currentMember = cache(async function currentMember(): Promise<Member | null> {
   const id = readToken((await cookies()).get(SESSION_COOKIE)?.value);
   if (!id) return null;
   const m = must(await sb().from("members").select("*").eq("id", id).maybeSingle()) as Member | null;
   return m && m.status === "active" ? m : null;
-}
+});
 
 const RANK: Record<Role, number> = { member: 1, admin: 2, owner: 3 };
 

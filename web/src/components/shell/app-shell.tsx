@@ -6,6 +6,7 @@ import { hoursAgo, must, sb } from "@/lib/db";
 import { can, type Member } from "@/lib/session";
 import { BottomTabs, NavLinks, type NavGroup, type TabItem } from "./nav-links";
 import { Pulse } from "./pulse";
+import { NavProgress } from "./nav-progress";
 import { ActivityTracker } from "./activity-tracker";
 import { unreadTotal } from "@/lib/chat";
 import { Suspense } from "react";
@@ -102,24 +103,30 @@ function SideContent({ count, last, member, company, unread, finds, feedback = 0
 }
 
 export async function AppShell({ children, member }: { children: ReactNode; member: Member | null }) {
-  const [newLeads, lastRun] = await Promise.all([
-    // Members only count their own new leads.
-    (member && !can(member, "admin")
-      ? sb().from("leads").select("id", { count: "exact", head: true }).eq("is_lead", true).eq("status", "new").or(`assigned_to.eq.${member.id},captured_by.eq.${member.id}`)
-      : sb().from("leads").select("id", { count: "exact", head: true }).eq("is_lead", true).eq("status", "new")),
-    sb().from("runs").select("at, added").order("id", { ascending: false }).limit(1).maybeSingle(),
-  ]);
-  const count = newLeads.count ?? 0;
-  const brand = await getBrand();
-  // New daily finds in the last 24 hours, for the menu.
+  const admin = !member || can(member, "admin");
+  const mineOnly = member && !admin ? `assigned_to.eq.${member.id},captured_by.eq.${member.id}` : null;
+  // Everything the menu needs, fetched at the same time rather than one after another.
+  let newQuery = sb().from("leads").select("id", { count: "exact", head: true }).eq("is_lead", true).eq("status", "new");
   // Only finds worth a look: the same "hide cold" cut the Daily finds list starts with.
   let findQuery = sb().from("leads").select("id", { count: "exact", head: true }).eq("is_lead", false).gte("score", 40).gte("captured_at", hoursAgo(24));
-  if (member && !can(member, "admin")) findQuery = findQuery.or(`assigned_to.eq.${member.id},captured_by.eq.${member.id}`);
-  const finds = (await findQuery).count ?? 0;
-  // Open feedback, for the admins' menu.
-  const feedback = !member || can(member, "admin") ? ((await sb().from("feedback").select("id", { count: "exact", head: true }).eq("status", "open")).count ?? 0) : 0;
-  const chat = member ? await unreadTotal(member).catch(() => 0) : 0;
-  const unread = member ? ((await sb().from("notifications").select("id", { count: "exact", head: true }).eq("member_id", member.id).is("read_at", null)).count ?? 0) : 0;
+  if (mineOnly) {
+    newQuery = newQuery.or(mineOnly);
+    findQuery = findQuery.or(mineOnly);
+  }
+  const zero = Promise.resolve({ count: 0 });
+  const [newLeads, lastRun, brand, findRes, feedbackRes, chat, unreadRes] = await Promise.all([
+    newQuery,
+    sb().from("runs").select("at, added").order("id", { ascending: false }).limit(1).maybeSingle(),
+    getBrand(),
+    admin ? findQuery : zero,
+    admin ? sb().from("feedback").select("id", { count: "exact", head: true }).eq("status", "open") : zero,
+    member ? unreadTotal(member).catch(() => 0) : Promise.resolve(0),
+    member ? sb().from("notifications").select("id", { count: "exact", head: true }).eq("member_id", member.id).is("read_at", null) : zero,
+  ]);
+  const count = newLeads.count ?? 0;
+  const finds = findRes.count ?? 0;
+  const feedback = feedbackRes.count ?? 0;
+  const unread = unreadRes.count ?? 0;
   const last = must(lastRun) as Last;
   return (
     <div className="min-h-dvh bg-canvas lg:grid lg:grid-cols-[272px_1fr]">
@@ -127,6 +134,7 @@ export async function AppShell({ children, member }: { children: ReactNode; memb
         <Suspense fallback={null}>
           <ActivityTracker />
           <Pulse />
+          <NavProgress />
         </Suspense>
       ) : null}
       <aside className="no-print sticky top-0 hidden h-dvh flex-col border-r border-border bg-background lg:flex">

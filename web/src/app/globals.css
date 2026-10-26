@@ -303,3 +303,13 @@ body {
     scroll-behavior: smooth;
   }
 }
+
+/* The page change bar grows quickly at first, then waits for the page. */
+@keyframes nav-grow {
+  from {
+    width: 0;
+  }
+  to {
+    width: 80%;
+  }
+}
