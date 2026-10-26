@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { TabIcon } from "./tab-icons";
 
 export type NavItem = { href: string; label: string; count?: number; match?: string[] };
 export type NavGroup = { label: string; items: NavItem[] };
@@ -124,12 +125,14 @@ export function BottomTabs({ tabs, groups, more }: { tabs: TabItem[]; groups: Na
                   href={t.href}
                   onClick={() => setOpen(false)}
                   aria-current={on ? "page" : undefined}
-                  className="relative flex h-16 touch-manipulation flex-col items-center justify-center gap-1 px-1 text-[12px] font-medium select-none active:bg-muted"
+                  className={`relative flex h-16 touch-manipulation flex-col items-center justify-center gap-0.5 px-1 text-[11.5px] font-medium select-none active:bg-muted ${on ? "text-primary" : "text-muted-foreground"}`}
                 >
-                  <span className={`h-1 w-8 rounded-full transition-colors ${on ? "bg-primary" : "bg-transparent"}`} aria-hidden />
-                  <span className={`truncate ${on ? "font-semibold text-primary" : "text-muted-foreground"}`}>{t.label}</span>
+                  <span className={`flex h-7 w-14 items-center justify-center rounded-full transition-colors ${on ? "bg-primary/12" : ""}`}>
+                    <TabIcon name={t.href} active={on} />
+                  </span>
+                  <span className={`truncate ${on ? "font-semibold" : ""}`}>{t.label}</span>
                   {t.count ? (
-                    <span className="absolute top-1.5 right-[calc(50%-1.9rem)] min-w-5 rounded-full bg-danger px-1.5 text-center text-[11px] leading-5 font-semibold text-white tabular-nums">
+                    <span className="absolute top-1 right-[calc(50%-2.2rem)] min-w-5 rounded-full bg-danger px-1.5 text-center text-[11px] leading-5 font-semibold text-white tabular-nums">
                       {t.count > 99 ? "99+" : t.count}
                     </span>
                   ) : null}
@@ -142,12 +145,14 @@ export function BottomTabs({ tabs, groups, more }: { tabs: TabItem[]; groups: Na
               type="button"
               onClick={() => setOpen((o) => !o)}
               aria-expanded={open}
-              className="relative flex h-16 w-full touch-manipulation flex-col items-center justify-center gap-1 px-1 text-[12px] font-medium select-none active:bg-muted"
+              className={`relative flex h-16 w-full touch-manipulation flex-col items-center justify-center gap-0.5 px-1 text-[11.5px] font-medium select-none active:bg-muted ${open || inMore ? "text-primary" : "text-muted-foreground"}`}
             >
-              <span className={`h-1 w-8 rounded-full ${open || inMore ? "bg-primary" : "bg-transparent"}`} aria-hidden />
-              <span className={open || inMore ? "font-semibold text-primary" : "text-muted-foreground"}>{open ? "Close" : "More"}</span>
+              <span className={`flex h-7 w-14 items-center justify-center rounded-full transition-colors ${open || inMore ? "bg-primary/12" : ""}`}>
+                <TabIcon name={open ? "close" : "more"} active={open || inMore} />
+              </span>
+              <span className={open || inMore ? "font-semibold" : ""}>{open ? "Close" : "More"}</span>
               {moreCount && !open ? (
-                <span className="absolute top-1.5 right-[calc(50%-1.9rem)] min-w-5 rounded-full bg-danger px-1.5 text-center text-[11px] leading-5 font-semibold text-white tabular-nums">{moreCount}</span>
+                <span className="absolute top-1 right-[calc(50%-2.2rem)] min-w-5 rounded-full bg-danger px-1.5 text-center text-[11px] leading-5 font-semibold text-white tabular-nums">{moreCount}</span>
               ) : null}
             </button>
           </li>
