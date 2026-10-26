@@ -86,6 +86,140 @@ export type Database = {
           },
         ]
       }
+      chat_members: {
+        Row: {
+          is_admin: boolean
+          joined_at: string
+          last_read_id: number
+          member_id: string
+          room_id: number
+        }
+        Insert: {
+          is_admin?: boolean
+          joined_at?: string
+          last_read_id?: number
+          member_id: string
+          room_id: number
+        }
+        Update: {
+          is_admin?: boolean
+          joined_at?: string
+          last_read_id?: number
+          member_id?: string
+          room_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_members_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_members_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "chat_rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_messages: {
+        Row: {
+          body: string
+          created_at: string
+          deleted_at: string | null
+          file_name: string | null
+          file_path: string | null
+          file_size: number | null
+          file_type: string | null
+          id: number
+          member_id: string | null
+          member_name: string | null
+          room_id: number
+        }
+        Insert: {
+          body?: string
+          created_at?: string
+          deleted_at?: string | null
+          file_name?: string | null
+          file_path?: string | null
+          file_size?: number | null
+          file_type?: string | null
+          id?: never
+          member_id?: string | null
+          member_name?: string | null
+          room_id: number
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          deleted_at?: string | null
+          file_name?: string | null
+          file_path?: string | null
+          file_size?: number | null
+          file_type?: string | null
+          id?: never
+          member_id?: string | null
+          member_name?: string | null
+          room_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_messages_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "chat_rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_rooms: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          direct_key: string | null
+          id: number
+          kind: string
+          last_message_at: string
+          name: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          direct_key?: string | null
+          id?: never
+          kind: string
+          last_message_at?: string
+          name?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          direct_key?: string | null
+          id?: never
+          kind?: string
+          last_message_at?: string
+          name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_rooms_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       companies: {
         Row: {
           domain: string | null

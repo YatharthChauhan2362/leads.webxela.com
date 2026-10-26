@@ -182,6 +182,7 @@ const FEATURES: [RegExp, string][] = [
   [/^\/people/, "People"],
   [/^\/dashboard/, "Dashboard"],
   [/^\/feedback/, "Feedback"],
+  [/^\/chat/, "Team chat"],
   [/^\/team/, "Team"],
   [/^\/settings/, "Searches and alerts"],
   [/^\/activity/, "Activity"],

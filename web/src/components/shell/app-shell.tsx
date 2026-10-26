@@ -6,11 +6,12 @@ import { hoursAgo, must, sb } from "@/lib/db";
 import { can, type Member } from "@/lib/session";
 import { MobileMenu, NavLinks, type NavGroup } from "./nav-links";
 import { ActivityTracker } from "./activity-tracker";
+import { unreadTotal } from "@/lib/chat";
 import { Suspense } from "react";
 
 const ROLE_WORDS: Record<string, string> = { owner: "Owner", admin: "Admin", member: "Member" };
 
-function nav(newCount: number, member: Member | null, unread = 0, findCount = 0, openFeedback = 0): NavGroup[] {
+function nav(newCount: number, member: Member | null, unread = 0, findCount = 0, openFeedback = 0, chat = 0): NavGroup[] {
   const admin = !member || can(member, "admin");
   if (!admin) {
     // Members get only what they need to work their leads.
@@ -20,6 +21,7 @@ function nav(newCount: number, member: Member | null, unread = 0, findCount = 0,
         items: [
           { href: "/", label: "Leads", count: newCount },
           { href: "/notifications", label: "Notifications", count: unread },
+          { href: "/chat", label: "Team chat", count: chat },
           { href: "/search", label: "Search" },
           { href: "/feedback", label: "Feedback" },
         ],
@@ -33,6 +35,7 @@ function nav(newCount: number, member: Member | null, unread = 0, findCount = 0,
         { href: "/dashboard", label: "Dashboard" },
         { href: "/", label: "Leads", count: newCount },
         { href: "/notifications", label: "Notifications", count: unread },
+        { href: "/chat", label: "Team chat", count: chat },
       ],
     },
     {
@@ -75,12 +78,12 @@ function StatusCard({ last, company }: { last: Last; company: string }) {
   );
 }
 
-function SideContent({ count, last, member, company, unread, finds, feedback = 0 }: { count: number; last: Last; member: Member | null; company: string; unread: number; finds: number; feedback?: number }) {
+function SideContent({ count, last, member, company, unread, finds, feedback = 0, chat = 0 }: { count: number; last: Last; member: Member | null; company: string; unread: number; finds: number; feedback?: number; chat?: number }) {
   return (
     <div className="flex min-h-full flex-col gap-6 [&>*]:shrink-0">
       <StatusCard last={last} company={company} />
       <nav aria-label="Main">
-        <NavLinks groups={nav(count, member, unread, finds, feedback)} />
+        <NavLinks groups={nav(count, member, unread, finds, feedback, chat)} />
       </nav>
       {member ? (
         <div className="mt-auto space-y-2 border-t border-border pt-4">
@@ -119,6 +122,7 @@ export async function AppShell({ children, member }: { children: ReactNode; memb
   const finds = (await findQuery).count ?? 0;
   // Open feedback, for the admins' menu.
   const feedback = !member || can(member, "admin") ? ((await sb().from("feedback").select("id", { count: "exact", head: true }).eq("status", "open")).count ?? 0) : 0;
+  const chat = member ? await unreadTotal(member).catch(() => 0) : 0;
   const unread = member ? ((await sb().from("notifications").select("id", { count: "exact", head: true }).eq("member_id", member.id).is("read_at", null)).count ?? 0) : 0;
   const last = must(lastRun) as Last;
   return (
@@ -133,14 +137,14 @@ export async function AppShell({ children, member }: { children: ReactNode; memb
           <Brand />
         </div>
         <div className="flex-1 overflow-y-auto p-4">
-          <SideContent count={count} last={last} member={member} company={brand.company} unread={unread} finds={finds} feedback={feedback} />
+          <SideContent count={count} last={last} member={member} company={brand.company} unread={unread} finds={finds} feedback={feedback} chat={chat} />
         </div>
       </aside>
       <div className="min-w-0">
         <header className="no-print sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background px-4 lg:hidden">
           <Brand />
           <MobileMenu label="Open menu">
-            <SideContent count={count} last={last} member={member} company={brand.company} unread={unread} finds={finds} feedback={feedback} />
+            <SideContent count={count} last={last} member={member} company={brand.company} unread={unread} finds={finds} feedback={feedback} chat={chat} />
           </MobileMenu>
         </header>
         <main className="mx-auto w-full max-w-[1760px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>

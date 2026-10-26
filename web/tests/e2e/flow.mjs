@@ -31,7 +31,7 @@ try {
   // Member A: nav
   await pa.goto(BASE + "/");
   const nav = await pa.locator("aside nav").innerText();
-  ok(/Leads/.test(nav) && /Notifications/.test(nav) && /Search/.test(nav) && /Feedback/.test(nav) && !/Chrome extension|Dashboard|Daily finds|People|Team/.test(nav), "member menu: Leads, Notifications, Search, Feedback (no extension)");
+  ok(/Leads/.test(nav) && /Notifications/.test(nav) && /Search/.test(nav) && /Feedback/.test(nav) && /Team chat/.test(nav) && !/Chrome extension|Dashboard|Daily finds|People|\bTeam\b(?! chat)/.test(nav), "member menu: Leads, Notifications, Team chat, Search, Feedback (no extension)");
 
   // A adds a lead by hand
   await pa.goto(BASE + "/leads/new");
@@ -263,7 +263,7 @@ try {
   await po.goto(BASE + "/dashboard");
   ok(/Claude routine is on/.test(await text(po)), "dashboard shows Claude routine on");
   await submitIn(po, "form:has(input[name=on])");
-  ok(/Claude routine is off/.test(await text(po)), "admin turned the Claude routine off");
+  ok(await po.waitForSelector("text=Claude routine is off", { timeout: 10000 }).then(() => true, () => false), "admin turned the Claude routine off");
   if (key) {
     const b = await (await fetch(BASE + "/api/brief", { headers: { "x-api-key": key } })).json();
     ok(b.paused === true, "routine brief says paused");
@@ -271,7 +271,7 @@ try {
     ok(i.paused === true, "routine finds ignored while off");
   }
   await submitIn(po, "form:has(input[name=on])");
-  ok(/Claude routine is on/.test(await text(po)), "turned back on");
+  ok(await po.waitForSelector("text=Claude routine is on", { timeout: 10000 }).then(() => true, () => false), "turned back on");
   if (key) ok(!(await (await fetch(BASE + "/api/brief", { headers: { "x-api-key": key } })).json()).paused, "routine brief works again");
   ok(/USD\s2,000/.test(await text(po)), "dashboard shows signed value in its currency");
   await po.goto(BASE + `/?who=${B}&status=all`);
