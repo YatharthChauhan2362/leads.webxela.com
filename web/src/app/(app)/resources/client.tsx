@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { buttonClass } from "@/components/ui/button";
 
 /** Copies one value, like an account number, and says so for a moment. */
-export function CopyButton({ text, label }: { text: string; label: string }) {
+export function CopyButton({ text, label, word = "Copy" }: { text: string; label: string; word?: string }) {
   const [done, setDone] = useState(false);
   return (
     <button
@@ -21,7 +21,7 @@ export function CopyButton({ text, label }: { text: string; label: string }) {
         }
       }}
     >
-      {done ? "Copied" : "Copy"}
+      {done ? "Copied" : word}
     </button>
   );
 }

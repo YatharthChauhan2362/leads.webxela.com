@@ -25,6 +25,13 @@ const Item = z.object({
     .max(2000)
     .refine((u) => !u || /^https?:\/\/[^\s]+$/i.test(u), "Links must start with https://")
     .default(""),
+  phone: z
+    .string()
+    .trim()
+    .max(40)
+    .refine((p) => !p || /^\+?[\d\s().-]{7,20}$/.test(p), "Phone numbers can have digits, spaces and a + only.")
+    .default(""),
+  email: z.union([z.literal(""), z.string().trim().toLowerCase().email("Check the email address.").max(320)]).default(""),
   note: z.string().trim().max(2000).default(""),
   admins_only: z.string().optional(),
   file_path: z.string().max(400).default(""),
@@ -44,13 +51,15 @@ export async function saveResource(formData: FormData) {
 
   const old = d.id ? (must(await sb().from("resources").select("file_path").eq("id", d.id).maybeSingle()) as { file_path: string | null } | null) : null;
   if (d.id && !old) done("That item is gone.", "error");
-  if (!d.value && !d.url && !d.file_path && !(old?.file_path && !d.remove_file)) done("Add some details, a link or a file.", "error");
+  if (!d.value && !d.url && !d.phone && !d.email && !d.file_path && !(old?.file_path && !d.remove_file)) done("Add a phone, email, details, a link or a file.", "error");
 
   const row: TablesInsert<"resources"> = {
     category: d.category,
     title: d.title,
     value: d.value,
     url: d.url || null,
+    phone: d.phone || null,
+    email: d.email || null,
     note: d.note || null,
     admins_only: d.admins_only === "on",
     updated_at: new Date().toISOString(),

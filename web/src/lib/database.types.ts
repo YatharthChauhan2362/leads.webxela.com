@@ -698,12 +698,14 @@ export type Database = {
           category: string
           created_at: string
           created_by: string | null
+          email: string | null
           file_name: string | null
           file_path: string | null
           file_size: number | null
           file_type: string | null
           id: number
           note: string | null
+          phone: string | null
           title: string
           updated_at: string
           url: string | null
@@ -714,12 +716,14 @@ export type Database = {
           category: string
           created_at?: string
           created_by?: string | null
+          email?: string | null
           file_name?: string | null
           file_path?: string | null
           file_size?: number | null
           file_type?: string | null
           id?: never
           note?: string | null
+          phone?: string | null
           title: string
           updated_at?: string
           url?: string | null
@@ -730,12 +734,14 @@ export type Database = {
           category?: string
           created_at?: string
           created_by?: string | null
+          email?: string | null
           file_name?: string | null
           file_path?: string | null
           file_size?: number | null
           file_type?: string | null
           id?: never
           note?: string | null
+          phone?: string | null
           title?: string
           updated_at?: string
           url?: string | null

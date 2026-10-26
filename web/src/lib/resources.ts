@@ -6,10 +6,10 @@ import { can, type Member } from "./session";
 // Items marked admins only never leave the server for members, and neither do their files.
 
 export const CATEGORIES = {
-  social: "Social profiles",
   contact: "Founders and contacts",
-  bank: "Bank and payments",
+  social: "Social profiles",
   document: "Pitch deck and documents",
+  bank: "Bank and payments",
   link: "Useful links",
   other: "Other",
 } as const;
@@ -21,6 +21,8 @@ export type Resource = {
   title: string;
   value: string;
   url: string | null;
+  phone: string | null;
+  email: string | null;
   note: string | null;
   file_path: string | null;
   file_name: string | null;
@@ -34,7 +36,7 @@ export const MAX_RESOURCE_FILE = 50 * 1024 * 1024;
 /** Only paths made by our upload link are accepted back. */
 export const RESOURCE_PREFIX = "items/";
 
-const COLS = "id, category, title, value, url, note, file_path, file_name, file_type, file_size, admins_only, updated_at";
+const COLS = "id, category, title, value, url, phone, email, note, file_path, file_name, file_type, file_size, admins_only, updated_at";
 
 /** Admins see everything; while sign in is not set up yet (me is null) the stand in owner does too. */
 export const seesPrivate = (me: Member | null) => !me || can(me, "admin");

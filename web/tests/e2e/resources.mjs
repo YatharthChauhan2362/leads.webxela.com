@@ -44,11 +44,12 @@ const dir = mkdtempSync(join(tmpdir(), "res-"));
 const deck = join(dir, "test-deck.pdf");
 writeFileSync(deck, "%PDF-1.4\n% test deck\n");
 
-async function add(p, { category, title, value = "", url = "", file = null, adminsOnly = false }) {
-  await p.goto(BASE + "/resources");
-  await p.click("summary:has-text('Add an item')");
+async function add(p, { category, title, value = "", url = "", phone = "", email = "", file = null, adminsOnly = false }) {
+  await p.goto(BASE + "/resources?add=1");
   await p.selectOption("#new-category", category);
   await p.fill("#new-title", title);
+  if (phone) await p.fill("#new-phone", phone);
+  if (email) await p.fill("#new-email", email);
   if (value) await p.fill("#new-value", value);
   if (url) await p.fill("#new-url", url);
   if (file) {
@@ -64,10 +65,12 @@ try {
   ok(/Resources/.test(await pa.locator("aside nav").first().innerText()), "Resources is in the admin menu");
   await pm.goto(BASE + "/resources");
   ok(/Resources/.test(await pm.locator("aside nav").first().innerText()), "Resources is in the member menu");
-  ok((await pm.locator("summary:has-text('Add an item')").count()) === 0, "members get no Add form");
+  ok((await pm.locator("a:has-text('Add an item')").count()) === 0, "members get no Add button");
+  await pm.goto(BASE + "/resources?add=1");
+  ok((await pm.locator("#new-title").count()) === 0, "members cannot open the Add form by link");
 
   await add(pa, { category: "social", title: `Test LinkedIn ${stamp}`, url: "https://www.linkedin.com/company/example" });
-  await add(pa, { category: "contact", title: `Test founder phone ${stamp}`, value: "+91 98765 43210" });
+  await add(pa, { category: "contact", title: `Test founder ${stamp}`, phone: "+91 98765 43210", email: "founder@example.com" });
   await add(pa, { category: "document", title: `Test pitch deck ${stamp}`, file: deck });
   await add(pa, { category: "bank", title: `Test bank ${stamp}`, value: `Account 000111222 ${stamp}`, adminsOnly: true });
   const main = await pa.locator("main").innerText();
@@ -85,8 +88,18 @@ try {
   ok(mtext.includes(`Test LinkedIn ${stamp}`) && mtext.includes(`Test pitch deck ${stamp}`), "member sees team items");
   ok(!mtext.includes(`Test bank ${stamp}`) && !mtext.includes("000111222"), "member does not see the admins only item");
   ok(!(await pm.content()).includes("000111222"), "admins only details are not in the member's page source");
-  ok((await pm.locator(`a[href^="tel:+919876543210"]`).count()) === 1, "phone number gets a Call button");
-  ok((await pm.locator("text=Edit").count()) === 0, "members cannot edit");
+  ok((await pm.locator(`a[href^="tel:+919876543210"]`).count()) === 1, "phone gets a Call button");
+  ok((await pm.locator(`a[href="https://wa.me/919876543210"]`).count()) === 1, "phone gets a WhatsApp button");
+  ok((await pm.locator(`a[href="mailto:founder@example.com"]`).count()) === 1, "email gets an Email button");
+  ok((await pm.locator("a:has-text('Edit')").count()) === 0, "members get no Edit links");
+  await pm.goto(BASE + `/resources?edit=${doc.id}`);
+  ok((await pm.locator("input[name=title]").count()) === 0, "members cannot open the Edit form by link");
+  await pm.goto(BASE + "/resources?section=document");
+  const only = await pm.locator("main").innerText();
+  ok(only.includes(`Test pitch deck ${stamp}`) && !only.includes(`Test LinkedIn ${stamp}`), "a section tab shows only that section");
+  await pm.goto(BASE + `/resources?q=${encodeURIComponent("98765")}`);
+  const found = await pm.locator("main").innerText();
+  ok(found.includes(`Test founder ${stamp}`) && !found.includes(`Test pitch deck ${stamp}`), "find by phone number works");
 
   // Files
   const mf = await api(MEM, `/api/resources/file/${doc.id}`);
@@ -108,16 +121,21 @@ try {
   const cross = await api(ADMIN, "/api/resources/upload", { method: "POST", headers: { "content-type": "application/json", origin: "https://evil.example" }, body: JSON.stringify({ name: "x.pdf", size: 10 }) });
   ok(cross.status === 403, "other sites cannot ask for an upload link");
 
+  await pa.goto(BASE + "/resources?add=1");
+  await pa.fill("#new-title", `Test bad phone ${stamp}`);
+  await pa.fill("#new-phone", "call me maybe");
+  await Promise.all([pa.waitForURL(/error=/), pa.click("form:has(#new-title) button[type=submit]")]);
+  ok(/Phone numbers can have digits/.test(await pa.locator("main").innerText()), "a phone with letters is refused");
+
   // Admin edit and remove
-  await pa.goto(BASE + "/resources");
-  const card = pa.locator(`div:has(> div > h3:text-is("Test founder phone ${stamp}"))`).first();
-  await card.locator("summary:has-text('Edit')").click();
-  await card.locator("textarea[name=value]").fill("founder@example.com");
-  await Promise.all([pa.waitForURL(/ok=Saved/), card.locator("button:has-text('Save')").click()]);
-  ok((await pa.locator(`a[href="mailto:founder@example.com"]`).count()) === 1, "edit saved, email gets an Email button");
+  const founder = rows.find((r) => r.title === `Test founder ${stamp}`);
+  await pa.goto(BASE + `/resources?edit=${founder.id}`);
+  await pa.fill(`#r${founder.id}-email`, "Founder2@Example.com");
+  await Promise.all([pa.waitForURL(/ok=Saved/), pa.click("#form button:has-text('Save')")]);
+  ok((await pa.locator(`a[href="mailto:founder2@example.com"]`).count()) === 1, "edit saved, email stored in lower case");
   pa.on("dialog", (d) => d.accept());
-  const dcard = pa.locator(`div:has(> div > h3:text-is("Test pitch deck ${stamp}"))`).first();
-  await Promise.all([pa.waitForURL(/ok=Removed/), dcard.locator("button:has-text('Remove')").click()]);
+  await pa.goto(BASE + `/resources?edit=${doc.id}`);
+  await Promise.all([pa.waitForURL(/ok=Removed/), pa.click("button:has-text('Remove this item')")]);
   const gone = (await db.storage.from("resources").list("items", { search: doc.file_path.slice(6) })).data ?? [];
   ok(gone.length === 0, "removing an item deletes its file");
 
