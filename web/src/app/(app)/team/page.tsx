@@ -15,7 +15,7 @@ import { authEnabled, requireMember, type Member } from "@/lib/session";
 type Team = { id: string; name: string };
 
 const ROLE_WORDS: Record<string, string> = { owner: "Owner", admin: "Admin", member: "Member" };
-const ROLE_HELP = "Admins manage the team and settings. Members work leads.";
+const ROLE_HELP = "Admins manage the team, settings and every lead. Members see only their own leads.";
 const JOB_HELP = "BDEs get hot leads handed to them.";
 
 export default async function TeamPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -30,7 +30,8 @@ export default async function TeamPage({ searchParams }: { searchParams: Promise
   const leadCount = new Map<string, number>();
   for (const a of assigned) leadCount.set(a.assigned_to, (leadCount.get(a.assigned_to) ?? 0) + 1);
   const teamName = new Map(teams.map((t) => [t.id, t.name]));
-  const roleOptions = owner ? ["member", "admin", "owner"] : ["member"];
+  // Admins can make admins; only the owner makes owners.
+  const roleOptions = owner ? ["member", "admin", "owner"] : ["member", "admin"];
   const providers = (["google", "zoho"] as const).filter((p) => providerEnabled(p));
   const allProviders = ["google", "zoho"] as const;
 

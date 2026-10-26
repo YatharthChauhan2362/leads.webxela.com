@@ -35,11 +35,11 @@ async function target(id: unknown): Promise<Member> {
   return m;
 }
 
-/** Only the owner can make or change owners and admins. Admins manage members. */
+/** Admins can make a member an admin. Only the owner can make owners, or change or demote an admin or owner. */
 function mayChange(me: Member | null, who: Member, newRole?: string) {
   if (!me) return true; // Sign in not set up yet: the app is in setup mode.
   if (who.role === "owner" && me.role !== "owner") return false;
-  if (newRole && newRole !== "member" && me.role !== "owner") return false;
+  if (newRole === "owner" && me.role !== "owner") return false;
   if (who.role === "admin" && !can(me, "owner")) return false;
   return true;
 }
@@ -52,7 +52,7 @@ export async function invite(formData: FormData) {
   if (!parsed.success) done("Enter a valid email address.", "error");
   const { email, name, role, login_with, job } = parsed.data;
   if (!providerEnabled(login_with)) done(`${login_with === "zoho" ? "Zoho" : "Google"} sign in is not set up yet.`, "error");
-  if (role !== "member" && me && me.role !== "owner") done("Only the owner can add admins.", "error");
+  if (role === "owner" && me && me.role !== "owner") done("Only the owner can add owners.", "error");
   const exists = must(await sb().from("members").select("id").eq("email", email).maybeSingle());
   if (exists) done(`${email} is already on the team.`, "error");
   const team_id = await teamFrom(formData);
@@ -68,7 +68,7 @@ export async function updateMember(formData: FormData) {
   const team_id = TeamId.parse(formData.get("team_id") ?? "");
   const login_with = z.enum(["google", "zoho"]).parse(formData.get("login_with") ?? who.login_with);
   const job = Job.parse(formData.get("job") ?? who.job);
-  if (!mayChange(me, who, role)) done("Only the owner can change admins and owners.", "error");
+  if (!mayChange(me, who, role)) done("Only the owner can change admins and owners, or make owners.", "error");
   if (who.id === me?.id && role !== who.role) done("You cannot change your own role.", "error");
   must(await sb().from("members").update({ role, team_id, login_with, job }).eq("id", who.id));
   await logActivity(me, "member_change", { target: who.email, detail: `${role}, ${login_with}, team ${team_id ?? "none"}` });
