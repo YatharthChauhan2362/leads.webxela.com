@@ -12,6 +12,7 @@ import { cleanProfileUrl, ingestPosts } from "@/lib/ingest";
 import { requireMember } from "@/lib/session";
 import { logActivity } from "@/lib/activity";
 import { whiteContrast } from "@/lib/brand";
+import { FONT_KEYS, FONTS } from "@/lib/fonts";
 import { assignTo } from "@/lib/assign";
 import { recordEvent, tellOthers } from "@/lib/history";
 import { findDuplicates } from "@/lib/duplicates";
@@ -214,7 +215,7 @@ export async function assignLead(formData: FormData) {
 export async function saveBranding(formData: FormData) {
   const me = await requireMember("admin");
   if (formData.get("reset") === "1") {
-    await setSettings({ brand_first: "Yatri", brand_second: "Leads", company_name: "Yatri Cloud", brand_color: "#0080FF", logo_url: "/logo.png", favicon_url: "", tab_title: "" });
+    await setSettings({ brand_first: "Yatri", brand_second: "Leads", company_name: "Yatri Cloud", brand_color: "#0080FF", logo_url: "/logo.png", favicon_url: "", tab_title: "", font: "inter" });
     await logActivity(me, "settings", { detail: "Branding reset" });
     back(formData, "Branding is back to the original.");
   }
@@ -225,6 +226,7 @@ export async function saveBranding(formData: FormData) {
       company_name: z.string().trim().min(1).max(60),
       brand_color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
       tab_title: z.string().trim().max(60).default(""),
+      font: z.enum(FONT_KEYS).default("inter"),
     })
     .safeParse(Object.fromEntries(formData));
   if (!r.success) back(formData, "Fill in the app name and company, and pick a colour.", "error");
@@ -254,7 +256,7 @@ export async function saveBranding(formData: FormData) {
   }
   if (formData.get("favicon_reset") === "1") favicon_url = "";
   await setSettings({ ...r.data, brand_color: r.data.brand_color.toUpperCase(), ...(logo_url ? { logo_url } : {}), ...(favicon_url !== undefined ? { favicon_url } : {}) });
-  await logActivity(me, "settings", { detail: `Branding: ${r.data.brand_first} ${r.data.brand_second}, ${r.data.brand_color}${logo_url ? ", new logo" : ""}${favicon_url ? ", new tab icon" : ""}` });
+  await logActivity(me, "settings", { detail: `Branding: ${r.data.brand_first} ${r.data.brand_second}, ${r.data.brand_color}${logo_url ? ", new logo" : ""}${favicon_url ? ", new tab icon" : ""}, font ${FONTS[r.data.font].label}` });
   back(formData, "Branding saved.");
 }
 

@@ -77,6 +77,8 @@ export const DEFAULT_SETTINGS = {
   // Browser tab: the small icon and the title. Empty means the logo and the app name.
   favicon_url: "",
   tab_title: "",
+  // The app's font, one of FONTS in lib/fonts.ts.
+  font: "inter",
 };
 
 export type SettingKey = keyof typeof DEFAULT_SETTINGS;

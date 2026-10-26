@@ -1,8 +1,9 @@
 import "server-only";
 import { cache } from "react";
 import { getSettings } from "./db";
+import { fontOf, type FontKey } from "./fonts";
 
-export type Brand = { first: string; second: string; company: string; color: string; hover: string; logo: string; favicon: string; tabTitle: string };
+export type Brand = { first: string; second: string; company: string; color: string; hover: string; logo: string; favicon: string; tabTitle: string; font: FontKey };
 
 /** Hex colour to relative luminance (WCAG). */
 function luminance(hex: string) {
@@ -37,6 +38,7 @@ export const getBrand = cache(async (): Promise<Brand> => {
     hover: darker(color),
     logo: s?.logo_url || "/logo.png",
     favicon: s?.favicon_url || s?.logo_url || "/logo.png",
+    font: fontOf(s?.font),
     tabTitle: s?.tab_title || `${s?.brand_first || "Yatri"} ${s?.brand_second || "Leads"}`.trim(),
   };
 });
