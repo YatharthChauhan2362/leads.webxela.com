@@ -7,7 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "prebuild": "bash scripts/pack-extension.sh"
+    "prebuild": "bash scripts/pack-extension.sh",
+    "test": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test:e2e": "node tests/e2e/flow.mjs",
+    "test:all": "vitest run && node tests/e2e/flow.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
@@ -28,6 +32,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.3",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.4"
   }
 }

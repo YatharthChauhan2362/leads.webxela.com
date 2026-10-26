@@ -13,13 +13,14 @@ const ASKS: RegExp[] = [
   /\b(anyone|who) (can|could|here can|knows?( a| an)?) (build|develop|make|create|design|recommend|suggest|refer)/i,
   /\b(recommend|recommendations?|suggest|suggestions?|refer|referrals?) (for |me )?(a |an )?(good |reliable |solid )?([\w.+#/-]+ ){0,2}(developers?|agency|agencies|freelancers?|dev shop|team|designers?)\b/i,
   /\b(outsourc(e|ing)|rfp|request for proposals?|fixed[- ]price|project[- ]basis|freelance (project|gig|work)|contract basis|paid project)\b/i,
-  /\bhiring\b[^.\n]{0,40}\b(freelancers?|agency|agencies|contractors?)\b/i,
+  /\bhiring\b[^.\n]{0,40}\b(freelance|freelancers?|agency|agencies|contractors?)\b/i,
+  /\b(anyone|does anyone|who) (know|knows|have|has) (of )?(a |an |any )?(good |reliable |solid )?([\w.+#/-]+ ){0,2}(developers?|devs?|agency|agencies|freelancers?|designers?|dev shop)\b/i,
   /\[(hiring|task|project)\]/i,
 ];
 
 // Developers, agencies and job seekers talking about themselves.
 const SELLER =
-  /\b(i am|i'm|we are|we're) (a |an )?([\w-]+ ){0,2}(freelancers?|developers?|agency|studio|company|team) (that|who|helping|specializ|offering|based)|\b(open to work|#opentowork|hire me|available for (work|projects|freelance|hire)|looking for (a )?(job|internship|opportunit|new role|work)|my portfolio|our portfolio|our services|we (build|develop|offer|provide|help|deliver|specialize|create)|dm (me |us )?for (services|projects|quotes?)|book a (call|demo)|free consultation|\[for hire\]|seeking (a )?(job|role|position|opportunit)|willing to relocate|r[ée]sum[ée]:|cv:|remote preferred|open to (remote|hybrid|relocation))/i;
+  /\b(i am|i'm|we are|we're) (a |an )?([\w-]+ ){0,2}(freelancers?|developers?|agency|studio|company|team) (that|who|helping|specializ|offering|based)|\b(open to work|#opentowork|hire me|available for (work|projects|freelance|hire)|looking for (a )?(job|internship|opportunit|new role|work)|my portfolio|our portfolio|our services|we (build|develop|offer|provide|help|deliver|specialize|create)|dm (me |us )?for (services|projects|quotes?)|book a (call|demo)|free consultation|\[for hire\]|seeking (a )?(job|role|position|opportunit)|willing to relocate|looking for (freelance |remote |part[- ]time |new )?(work|projects|gigs|clients)\b|open to (freelance|new) (work|projects)|r[ée]sum[ée]:|cv:|remote preferred|open to (remote|hybrid|relocation))/i;
 
 // Companies hiring employees: a job, not a project.
 const JOB =

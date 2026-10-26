@@ -12,7 +12,7 @@ import { cleanProfileUrl, ingestPosts } from "@/lib/ingest";
 import { requireMember } from "@/lib/session";
 import { logActivity } from "@/lib/activity";
 import { whiteContrast } from "@/lib/brand";
-import { assignTo, pickBde } from "@/lib/assign";
+import { assignTo } from "@/lib/assign";
 import { recordEvent, tellOthers } from "@/lib/history";
 import { findDuplicates } from "@/lib/duplicates";
 import { STATUS_WORDS, money } from "@/components/leads";
@@ -167,7 +167,8 @@ export async function rescoreAll(formData: FormData) {
 }
 
 export async function checkNow(formData: FormData) {
-  const me = await requireMember();
+  // Each check spends the Google search allowance, so only admins run it.
+  const me = await requireMember("admin");
   let msg: string;
   try {
     const r = await pollSources();
@@ -257,17 +258,6 @@ export async function saveBranding(formData: FormData) {
   back(formData, "Branding saved.");
 }
 
-/** Gives the lead to the BDE with the fewest open leads. */
-export async function handToBde(formData: FormData) {
-  const me = await requireMember();
-  const id = Id.parse(formData.get("id"));
-  await requireLeadAccess(me, id);
-  const bde = await pickBde();
-  if (!bde) back(formData, "There are no BDEs yet. Set someone's job to BDE on the Team page.", "error");
-  await assignTo(id, bde.id);
-  await logActivity(me, "assign", { target: `lead ${id}`, detail: `Handed to BDE ${bde.email}` });
-  back(formData, `Given to ${bde.name || bde.email}.`);
-}
 
 /** Date to follow up on this lead. Empty clears it. */
 export async function setFollowUp(formData: FormData) {
@@ -450,7 +440,8 @@ export async function deleteLeads(formData: FormData) {
   const ids = formData.getAll("ids").map((v) => Id.parse(v));
   if (!ids.length) back(formData, "Tick the leads to delete first.", "error");
   let q = sb().from("leads").delete().in("id", ids);
-  if (!seesAll(me) && me) q = q.eq("captured_by", me.id);
+  // Members delete only leads they added and still have. A lead given to a teammate is the teammate's work.
+  if (!seesAll(me) && me) q = q.eq("captured_by", me.id).or(`assigned_to.is.null,assigned_to.eq.${me.id}`);
   const gone = must(await q.select("id")) as { id: number }[];
   await logActivity(me, "delete_lead", { detail: `Deleted ${gone.length} lead${gone.length === 1 ? "" : "s"}` });
   back(formData, gone.length === ids.length ? `Deleted ${gone.length}.` : `Deleted ${gone.length}. The others were not yours to delete.`);

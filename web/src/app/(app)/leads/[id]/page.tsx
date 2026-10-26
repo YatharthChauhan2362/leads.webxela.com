@@ -257,7 +257,7 @@ export default async function LeadPage({ params, searchParams }: { params: Promi
                 <dd>{SOURCES[lead.source] ?? lead.source}</dd>
               </div>
             </dl>
-            {all || lead.captured_by === me?.id ? (
+            {all || (lead.captured_by === me?.id && (!lead.assigned_to || lead.assigned_to === me?.id)) ? (
               <form action={deleteLeads} className="mt-4 border-t border-border pt-4">
                 <input type="hidden" name="ids" value={lead.id} />
                 <input type="hidden" name="back" value="/" />
