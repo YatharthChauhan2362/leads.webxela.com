@@ -8,6 +8,7 @@ import { requireMember } from "@/lib/session";
 import { sb } from "@/lib/db";
 import { storePhoto } from "@/lib/photos";
 import { findDuplicates } from "@/lib/duplicates";
+import { sourceOfLink } from "@/lib/platforms";
 
 const Hit = z.object({
   title: z.string().max(500),
@@ -34,7 +35,7 @@ export async function saveHitAsLead(formData: FormData) {
   const res = await ingestPosts(
     [
       {
-        source: /linkedin\.com/.test(h.link) ? "linkedin" : "manual",
+        source: sourceOfLink(h.link),
         postUrl: h.link,
         postId: h.link.match(/activity-(\d{15,})/)?.[1] ? `urn:li:activity:${h.link.match(/activity-(\d{15,})/)![1]}` : h.link,
         author: h.title.split(/ on LinkedIn| \| | - |: /)[0].trim() || null,

@@ -12,7 +12,7 @@ const KINDS: Record<string, { word: string; sites: string }> = {
   posts: { word: "Posts", sites: "www.linkedin.com/posts/*, www.linkedin.com/feed/update/*, www.linkedin.com/pulse/*" },
   profiles: { word: "People", sites: "www.linkedin.com/in/*" },
   companies: { word: "Companies", sites: "www.linkedin.com/company/*" },
-  contacts: { word: "Web contacts", sites: "Search the entire web, or github.com/*, x.com/*, about.me/*, linktr.ee/*, medium.com/*, www.crunchbase.com/*" },
+  contacts: { word: "Web contacts", sites: "Turn on Search the entire web. Social search uses this engine for Instagram, X, Facebook, Reddit, YouTube, Upwork and LinkedIn jobs, so it must not be limited to a few sites." },
   elsewhere: { word: "Other sites", sites: "www.reddit.com/r/forhire/*, www.reddit.com/r/startups/*, news.ycombinator.com/*, x.com/*/status/*, www.indiehackers.com/*" },
 };
 

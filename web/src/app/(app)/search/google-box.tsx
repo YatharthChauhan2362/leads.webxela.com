@@ -8,6 +8,8 @@ import { Card, EmptyState } from "@/components/ui/layout";
 import { THead, Table, Td, Th, Tr } from "@/components/ui/table";
 import { COUNTRIES } from "@/lib/places";
 import { SubmitButton } from "@/components/ui/submit-button";
+import { extractEmails, extractPhones } from "@/lib/contacts";
+import { audienceOf, handleOf } from "@/lib/platforms";
 
 type Hit = { title: string; link: string; snippet: string; photo: string | null };
 type Ranked = Hit & { confirmed: boolean; points: number; why: string[] };
@@ -143,6 +145,9 @@ export function GoogleBox({
   clientsOnly = false,
   services = [],
   places = [],
+  keep,
+  skip,
+  platform,
 }: {
   cx: string;
   q: string;
@@ -157,10 +162,16 @@ export function GoogleBox({
   clientsOnly?: boolean;
   services?: string[];
   places?: string[];
+  /** Social search: links must match keep and not skip (regex source), so wrong pages never show. */
+  keep?: string;
+  skip?: string;
+  /** Social search: show the handle, audience and any contact Google shows for each result. */
+  platform?: string;
 }) {
   const [hits, setHits] = useState<Ranked[] | null>(null);
   const [skipped, setSkipped] = useState(0);
   const [notClients, setNotClients] = useState(0);
+  const [offTarget, setOffTarget] = useState(0);
   const [progress, setProgress] = useState("");
   const [error, setError] = useState<string | null>(null);
   const started = useRef(false);
@@ -186,6 +197,9 @@ export function GoogleBox({
     }
     let skippedCount = 0;
     let notClientCount = 0;
+    let offTargetCount = 0;
+    const keepRe = keep ? new RegExp(keep, "i") : null;
+    const skipRe = skip ? new RegExp(skip, "i") : null;
     const remember = () => {
       try {
         const all = [...shownBefore, ...kept.map((k) => norm(k.link))].slice(-1000);
@@ -229,6 +243,11 @@ export function GoogleBox({
               .filter((h) => h.link && !seen.has(h.link));
             for (const h of list) {
               seen.add(h.link);
+              // Not the kind of page this search is for, like a photo instead of a profile.
+              if ((keepRe && !keepRe.test(h.link)) || (skipRe && skipRe.test(h.link))) {
+                offTargetCount++;
+                continue;
+              }
               const key = norm(h.link);
               if (onlyNew && (savedSet.has(urlHash(h.link)) || shownBefore.has(key))) {
                 skippedCount++;
@@ -245,6 +264,7 @@ export function GoogleBox({
             }
             setSkipped(skippedCount);
             setNotClients(notClientCount);
+            setOffTarget(offTargetCount);
             setHits(sortRanked(kept).slice(0, count));
             // Google gives 10 a page and at most 10 pages. Keep going until we have enough.
             if (kept.length >= count || (results ?? []).length < 10 || page >= 10) {
@@ -284,7 +304,7 @@ export function GoogleBox({
       clearTimeout(t);
       unlockScroll();
     };
-  }, [cx, q, count, confirmTerms, confirmedOnly, newest, known, onlyNew, clientsOnly, services, places, kind]);
+  }, [cx, q, count, confirmTerms, confirmedOnly, newest, known, onlyNew, clientsOnly, services, places, kind, keep, skip]);
 
   if (!q) return null;
   if (error) return <EmptyState title="Search did not load" description={error} />;
@@ -302,6 +322,7 @@ export function GoogleBox({
           {confirmTerms.length ? `, ${hits.filter((h) => h.confirmed).length} with the location confirmed` : ""}
           {skipped ? `. Skipped ${skipped} you already saved or saw before.` : ""}
           {notClients ? `. Hid ${notClients} that were not clients: job ads, sellers, job seekers or tips.` : ""}
+          {offTarget ? `. Left out ${offTarget} other kinds of pages.` : ""}
         </p>
       ) : null}
       {hits === null ? null : hits.length === 0 ? (
@@ -391,6 +412,7 @@ export function GoogleBox({
                   </a>
                   <p className="mt-0.5 text-[13px] break-all text-muted-foreground">{h.link}</p>
                   {h.snippet ? <p className="mt-2 text-[15px] text-foreground">{h.snippet}</p> : null}
+                  {platform ? <Found h={h} /> : null}
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-2">
                   <SaveButtons h={h} back={back} />
@@ -417,5 +439,34 @@ function SaveButtons({ h, back }: { h: Hit; back: string }) {
         Save as lead
       </SubmitButton>
     </form>
+  );
+}
+
+/** What a social result shows at a glance: the handle, how big the audience is, and any email or phone in the snippet. */
+function Found({ h }: { h: Hit }) {
+  const text = `${h.title}\n${h.snippet}`;
+  const handle = handleOf(h.link);
+  const audience = audienceOf(text);
+  const emails = extractEmails(text).slice(0, 2);
+  const phones = extractPhones(text)
+    .filter((p) => p.replace(/\D/g, "").length >= 10)
+    .slice(0, 2);
+  if (!handle && !audience && !emails.length && !phones.length) return null;
+  const chip = "inline-flex min-h-[32px] items-center rounded-full border border-border px-3 text-[13px] font-medium";
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {handle ? <span className={chip}>{handle}</span> : null}
+      {audience ? <span className={chip}>{audience}</span> : null}
+      {emails.map((e) => (
+        <a key={e} href={`mailto:${e}`} className={`${chip} text-primary hover:bg-muted`}>
+          {e}
+        </a>
+      ))}
+      {phones.map((p) => (
+        <a key={p} href={`tel:${p.replace(/[^\d+]/g, "")}`} className={`${chip} text-primary hover:bg-muted`}>
+          {p}
+        </a>
+      ))}
+    </div>
   );
 }
