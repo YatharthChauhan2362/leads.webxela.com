@@ -692,6 +692,65 @@ export type Database = {
           },
         ]
       }
+      resources: {
+        Row: {
+          admins_only: boolean
+          category: string
+          created_at: string
+          created_by: string | null
+          file_name: string | null
+          file_path: string | null
+          file_size: number | null
+          file_type: string | null
+          id: number
+          note: string | null
+          title: string
+          updated_at: string
+          url: string | null
+          value: string
+        }
+        Insert: {
+          admins_only?: boolean
+          category: string
+          created_at?: string
+          created_by?: string | null
+          file_name?: string | null
+          file_path?: string | null
+          file_size?: number | null
+          file_type?: string | null
+          id?: never
+          note?: string | null
+          title: string
+          updated_at?: string
+          url?: string | null
+          value?: string
+        }
+        Update: {
+          admins_only?: boolean
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          file_name?: string | null
+          file_path?: string | null
+          file_size?: number | null
+          file_type?: string | null
+          id?: never
+          note?: string | null
+          title?: string
+          updated_at?: string
+          url?: string | null
+          value?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "resources_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       runs: {
         Row: {
           added: number

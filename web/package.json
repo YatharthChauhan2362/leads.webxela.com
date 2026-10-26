@@ -11,8 +11,9 @@
     "test": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:e2e": "node tests/e2e/flow.mjs",
-    "test:all": "vitest run && node tests/e2e/flow.mjs && node tests/e2e/chat.mjs",
-    "test:chat": "node tests/e2e/chat.mjs"
+    "test:all": "vitest run && node tests/e2e/flow.mjs && node tests/e2e/chat.mjs && node tests/e2e/resources.mjs",
+    "test:chat": "node tests/e2e/chat.mjs",
+    "test:resources": "node tests/e2e/resources.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
